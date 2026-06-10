@@ -1,25 +1,39 @@
+"""Agent runner using the claude-agent-sdk agentic loop."""
+
 from __future__ import annotations
 
-import json
-import os
+import asyncio
 import time
 from typing import Generator
 
-from openai import OpenAI
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    ResultMessage,
+    TextBlock,
+    ThinkingBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    query,
+)
 
 from agent.context import ConversationContext
 from agent.system_prompt import get_system_prompt
-from tools import TOOL_DISPATCH, TOOL_SCHEMAS
+from tools.mcp_server import build_sdk_server
+
+MODEL = "claude-sonnet-4-6"
 
 
-def get_client() -> OpenAI:
-    return OpenAI(
-        api_key=os.environ["OPENROUTER_API_KEY"],
-        base_url="https://openrouter.ai/api/v1",
+def _build_options(context: ConversationContext) -> ClaudeAgentOptions:
+    system = get_system_prompt() + context.working_memory_hint
+    return ClaudeAgentOptions(
+        model=MODEL,
+        system_prompt=system,
+        permission_mode="bypassPermissions",
+        mcp_servers={"home-assets": build_sdk_server()},
+        disallowed_tools=["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "Read"],
+        max_turns=25,
     )
-
-
-MODEL = "anthropic/claude-sonnet-4-6"
 
 
 def run_turn(
@@ -30,94 +44,110 @@ def run_turn(
 
     Event types:
       {"type": "tool_call", "name": str, "args": dict, "call_id": str}
-      {"type": "tool_result", "name": str, "call_id": str, "result": dict}
+      {"type": "tool_result", "name": str, "call_id": str, "result": str}
       {"type": "assistant_text", "content": str}
       {"type": "metrics", "latency_ms": int, "tokens": int, "tool_call_count": int}
     """
-    client = get_client()
-    context.add_user(user_message + context.working_memory_hint)
-    context.maybe_summarise()
+    events: list[dict] = []
+    asyncio.run(_run_async(user_message, context, events))
+    yield from events
 
-    system = get_system_prompt()
-    tool_call_count = 0
+
+async def _run_async(
+    user_message: str,
+    context: ConversationContext,
+    events: list[dict],
+) -> None:
     start = time.monotonic()
+    options = _build_options(context)
+    tool_call_count = 0
+    final_text = ""
+    total_tokens = 0
 
-    messages = [{"role": "system", "content": system}] + context.to_api_messages()
+    # Build the prompt — include conversation history as context prefix if needed
+    prompt = context.format_prompt(user_message)
 
-    while True:
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            tools=TOOL_SCHEMAS,
-            tool_choice="auto",
-        )
+    # Track tool call names for working memory updates
+    pending_tool_calls: dict[str, str] = {}  # call_id → tool_name
 
-        choice = response.choices[0]
-        msg = choice.message
+    async for msg in query(prompt=prompt, options=options):
+        if isinstance(msg, AssistantMessage):
+            for block in msg.content:
+                if isinstance(block, TextBlock):
+                    final_text = block.text
 
-        # Accumulate assistant message into the rolling messages list
-        messages.append(msg.model_dump(exclude_none=True))
+                elif isinstance(block, ThinkingBlock):
+                    pass  # Thinking blocks not surfaced in UI
 
-        if choice.finish_reason == "tool_calls" and msg.tool_calls:
-            for tc in msg.tool_calls:
-                fn_name = tc.function.name
-                try:
-                    fn_args = json.loads(tc.function.arguments)
-                except json.JSONDecodeError:
-                    fn_args = {}
+                elif isinstance(block, ToolUseBlock):
+                    tool_call_count += 1
+                    pending_tool_calls[block.id] = block.name
+                    events.append({
+                        "type": "tool_call",
+                        "name": block.name,
+                        "args": block.input,
+                        "call_id": block.id,
+                    })
 
-                yield {"type": "tool_call", "name": fn_name, "args": fn_args, "call_id": tc.id}
+                elif isinstance(block, ToolResultBlock):
+                    tool_name = pending_tool_calls.get(block.tool_use_id, "unknown")
+                    result_content = block.content or ""
 
-                fn = TOOL_DISPATCH.get(fn_name)
-                if fn:
-                    result = fn(**fn_args)
-                    # Track mentioned assets for working memory
-                    if fn_name in ("list_assets", "search_assets") and isinstance(result, dict):
-                        for asset in result.get("assets", []):
-                            context.track_asset(asset.get("name", ""), asset.get("id", 0))
-                    elif fn_name == "get_asset_history" and isinstance(result, dict):
-                        a = result.get("asset", {})
-                        if a:
-                            context.track_asset(a.get("name", ""), a.get("id", 0))
-                else:
-                    result = {"error": f"Unknown tool: {fn_name}"}
+                    # Update working memory when assets are returned
+                    _update_working_memory(context, tool_name, result_content)
 
-                result_str = json.dumps(result)
-                tool_call_count += 1
-                yield {"type": "tool_result", "name": fn_name, "call_id": tc.id, "result": result}
+                    events.append({
+                        "type": "tool_result",
+                        "name": tool_name,
+                        "call_id": block.tool_use_id,
+                        "result": result_content,
+                    })
 
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "content": result_str,
-                })
+            if msg.usage:
+                total_tokens = (
+                    msg.usage.get("input_tokens", 0) + msg.usage.get("output_tokens", 0)
+                )
 
-        elif choice.finish_reason == "stop":
-            final_text = msg.content or ""
-            # Store the clean final text in context (strip the working memory hint)
-            context.add_assistant(final_text)
-            # Update context messages to include any tool calls from this turn
-            # (already captured in rolling `messages` list — sync back)
-            _sync_turn_to_context(context, messages)
+        elif isinstance(msg, ResultMessage):
+            if msg.usage:
+                total_tokens = (
+                    msg.usage.get("input_tokens", 0) + msg.usage.get("output_tokens", 0)
+                )
 
-            yield {"type": "assistant_text", "content": final_text}
+    if final_text:
+        context.add_turn(user_message, final_text)
+        events.append({"type": "assistant_text", "content": final_text})
 
-            usage = response.usage
-            latency_ms = int((time.monotonic() - start) * 1000)
-            tokens = (usage.total_tokens if usage else 0)
-            yield {
-                "type": "metrics",
-                "latency_ms": latency_ms,
-                "tokens": tokens,
-                "tool_call_count": tool_call_count,
-            }
-            break
-        else:
-            # Unexpected finish reason
-            break
+    latency_ms = int((time.monotonic() - start) * 1000)
+    events.append({
+        "type": "metrics",
+        "latency_ms": latency_ms,
+        "tokens": total_tokens,
+        "tool_call_count": tool_call_count,
+    })
 
 
-def _sync_turn_to_context(context: ConversationContext, messages: list[dict]) -> None:
-    """Replace context.messages with the full rolled-up messages from this turn."""
-    # Strip the system message prepended in run_turn
-    context.messages = [m for m in messages if m.get("role") != "system"]
+def _update_working_memory(context: ConversationContext, tool_name: str, result) -> None:
+    """Extract asset IDs from tool results and add to working memory."""
+    import json
+    try:
+        data = json.loads(result) if isinstance(result, str) else result
+    except (json.JSONDecodeError, TypeError):
+        return
+
+    if not isinstance(data, dict):
+        return
+
+    if tool_name in ("list_assets", "search_assets"):
+        for asset in data.get("assets", []):
+            if isinstance(asset, dict):
+                context.track_asset(asset.get("name", ""), asset.get("id", 0))
+
+    elif tool_name == "get_asset_history":
+        asset = data.get("asset", {})
+        if isinstance(asset, dict):
+            context.track_asset(asset.get("name", ""), asset.get("id", 0))
+
+    elif tool_name == "add_asset":
+        if data.get("status") == "created":
+            context.track_asset(data.get("name", ""), data.get("asset_id", 0))

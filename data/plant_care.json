@@ -1,0 +1,77 @@
+{
+  "lemon tree": {
+    "fertilise": {"interval_days": 90, "notes": "Citrus-specific fertiliser (e.g. Yates Citrus Food). Spring and summer are most important."},
+    "prune": {"interval_days": 365, "notes": "Light shaping after main fruiting season. Remove dead wood and crossing branches."},
+    "check_pests": {"interval_days": 30, "notes": "Watch for: scale insects (brown bumps), leafminer (squiggly trails on leaves), aphids."},
+    "deep_water": {"interval_days": 14, "notes": "Deep soak to encourage deep root growth. Reduce in winter. Ensure good drainage."},
+    "mulch": {"interval_days": 180, "notes": "Apply 5–10cm of organic mulch, keeping clear of trunk."}
+  },
+  "orange tree": {
+    "fertilise": {"interval_days": 90, "notes": "Citrus fertiliser, spring through autumn. Avoid high nitrogen in winter."},
+    "prune": {"interval_days": 365, "notes": "Prune lightly after harvest. Remove suckers from below graft union."},
+    "check_pests": {"interval_days": 30, "notes": "Scale, leafminer, fruit fly in late summer."},
+    "deep_water": {"interval_days": 14, "notes": "Regular deep watering, especially during fruiting."}
+  },
+  "rose": {
+    "fertilise": {"interval_days": 42, "notes": "Rose-specific fertiliser from spring to autumn. Stop 6 weeks before first frost."},
+    "prune": {"interval_days": 180, "notes": "Hard prune in winter (July in Australia). Deadhead spent flowers throughout flowering season."},
+    "spray_fungicide": {"interval_days": 14, "notes": "Preventative spray for black spot and powdery mildew. Use copper-based fungicide."},
+    "check_pests": {"interval_days": 14, "notes": "Aphids, thrips, two-spotted mite. Check undersides of leaves."}
+  },
+  "eucalyptus": {
+    "arborist_check": {"interval_days": 730, "notes": "Have a qualified arborist inspect for structural integrity, especially near structures or fences."},
+    "prune": {"interval_days": 730, "notes": "Minimal pruning — remove dead or hazardous limbs only. Avoid pruning in late summer (attract borers)."},
+    "check_pests": {"interval_days": 90, "notes": "Psyllids, longicorn borers, lerps. Look for yellowing or dying branches."}
+  },
+  "agapanthus": {
+    "fertilise": {"interval_days": 180, "notes": "Light slow-release fertiliser in spring."},
+    "prune": {"interval_days": 365, "notes": "Remove spent flower stalks. Divide clumps every 3–5 years when flowering declines."},
+    "water": {"interval_days": 14, "notes": "Drought tolerant once established but flowers better with occasional summer water."}
+  },
+  "lavender": {
+    "prune": {"interval_days": 180, "notes": "Trim by one-third after flowering to maintain shape and prevent woody base."},
+    "fertilise": {"interval_days": 365, "notes": "Low fertiliser needs — light organic feed in spring only."},
+    "check_drainage": {"interval_days": 365, "notes": "Lavender hates wet roots. Ensure excellent drainage."}
+  },
+  "murraya": {
+    "fertilise": {"interval_days": 90, "notes": "Slow-release fertiliser in spring and summer."},
+    "prune": {"interval_days": 180, "notes": "Trim for shape after flowering. Tolerates hard pruning."},
+    "water": {"interval_days": 7, "notes": "Regular watering especially in heat. Mulch to retain moisture."}
+  },
+  "frangipani": {
+    "fertilise": {"interval_days": 90, "notes": "High-phosphorus fertiliser (e.g. Osmocote Plus) in spring and summer to encourage flowers."},
+    "prune": {"interval_days": 365, "notes": "Prune in late winter before new growth. Milky sap — wear gloves."},
+    "check_rust": {"interval_days": 30, "notes": "Frangipani rust (orange spots on leaves) is common. Spray with fungicide if severe."},
+    "water": {"interval_days": 14, "notes": "Drought tolerant. Reduce watering in winter — risk of root rot."}
+  },
+  "camellia": {
+    "fertilise": {"interval_days": 90, "notes": "Camellia/azalea fertiliser (acid-loving plants). Spring after flowering finishes."},
+    "prune": {"interval_days": 365, "notes": "Immediately after flowering. Remove spent blooms to prevent petal blight spread."},
+    "mulch": {"interval_days": 180, "notes": "Acidic mulch (pine bark) to maintain soil pH around 5.5–6.5."},
+    "water": {"interval_days": 7, "notes": "Regular water especially during bud formation (autumn). Never let roots dry out."}
+  },
+  "wisteria": {
+    "prune": {"interval_days": 180, "notes": "Prune twice: summer (trim new shoots to 5 leaves) and winter (cut back hard to 2–3 buds)."},
+    "fertilise": {"interval_days": 180, "notes": "Low nitrogen — promotes foliage over flowers. Use a tomato fertiliser."},
+    "check_structure": {"interval_days": 180, "notes": "Check attachment points — wisteria is extremely heavy when mature and can damage structures."}
+  },
+  "bamboo": {
+    "water": {"interval_days": 3, "notes": "Frequent watering especially in pots or during establishment."},
+    "fertilise": {"interval_days": 60, "notes": "High nitrogen fertiliser spring through summer."},
+    "contain": {"interval_days": 180, "notes": "Running bamboo — check for rhizome escape. Install root barrier if not already present."}
+  },
+  "lawn": {
+    "mow": {"interval_days": 14, "notes": "During growing season. Raise mowing height in summer to reduce water stress."},
+    "fertilise": {"interval_days": 90, "notes": "Lawn fertiliser spring through summer. Don't fertilise in drought."},
+    "aerate": {"interval_days": 365, "notes": "Aerate compacted areas each spring. Helps water penetration."},
+    "weed": {"interval_days": 90, "notes": "Spot-treat bindii and broadleaf weeds before seeding."},
+    "water": {"interval_days": 3, "notes": "Deep, infrequent watering encourages deep roots. Check local water restrictions."}
+  },
+  "default": {
+    "check_health": {"interval_days": 30, "notes": "General visual inspection: yellowing, wilting, pests, unusual growth."},
+    "fertilise": {"interval_days": 180, "notes": "Slow-release all-purpose fertiliser in spring."},
+    "prune": {"interval_days": 365, "notes": "Annual light prune — remove dead or damaged growth."},
+    "water": {"interval_days": 7, "notes": "Regular watering during establishment (first year). Reduce once established."},
+    "mulch": {"interval_days": 365, "notes": "Annual top-up of organic mulch to retain moisture and suppress weeds."}
+  }
+}

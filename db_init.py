@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS assets (
     warranty_expiry TEXT,
     location        TEXT,
     notes           TEXT,
+    plant_species   TEXT,
+    plant_size      TEXT,
+    planting_date   TEXT,
+    plant_notes     TEXT,
     created_at      TEXT NOT NULL
 );
 
@@ -37,17 +41,21 @@ CREATE TABLE IF NOT EXISTS maintenance_tasks (
 """
 
 SEED_ASSETS = [
-    # (name, category, brand, model, serial, purchase_date, price, warranty_expiry, location, notes)
-    ("Dishwasher", "appliances", "Bosch", "SMS6ZCI00A", "BOS-2021-88341", "2021-03-15", 1299.0, "2027-03-15", "Kitchen", "Stainless steel interior"),
-    ("Refrigerator", "appliances", "Samsung", "SRF801GDLS", "SAM-2020-55219", "2020-08-10", 2499.0, "2025-08-10", "Kitchen", "French door, ice maker"),
-    ("Washing Machine", "appliances", "LG", "WTR1232C", "LG-2022-33901", "2022-01-20", 999.0, "2027-01-20", "Laundry", "Front loader 8kg"),
-    ("HVAC System", "HVAC", "Daikin", "FTXM50W", "DAI-2019-70042", "2019-06-01", 3800.0, "2024-06-01", "Whole house", "Split system, 5kW. Warranty expired."),
-    ("Hot Water System", "plumbing", "Rheem", "522365", "RHM-2020-19283", "2020-02-14", 1450.0, "2025-02-14", "Outside utility", "Gas continuous flow"),
-    ("Smoke Alarm - Kitchen", "electrical", "Clipsal", "755PSMA", None, "2021-09-01", 85.0, None, "Kitchen", "Photoelectric + CO"),
-    ("Smoke Alarm - Hallway", "electrical", "Clipsal", "755PSMA", None, "2021-09-01", 85.0, None, "Hallway", "Photoelectric"),
-    ("Garage Door Opener", "exterior", "Merlin", "MR865EVO", "MRL-2020-44821", "2020-05-10", 650.0, "2023-05-10", "Garage", "Belt drive, warranty expired"),
-    ("Lawn Mower", "garden", "Honda", "HRU196M2", "HON-2021-29031", "2021-11-01", 879.0, "2024-11-01", "Shed", "Self-propelled"),
-    ("Car - Toyota Camry", "vehicle", "Toyota", "Camry 2019 Hybrid", "2T1BURHE0JC037610", "2019-04-15", 38000.0, "2024-04-15", "Garage", "Petrol-electric hybrid, rego due April"),
+    # (name, category, brand, model, serial, purchase_date, price, warranty_expiry, location, notes, plant_species, plant_size, planting_date, plant_notes)
+    ("Dishwasher", "appliances", "Bosch", "SMS6ZCI00A", "BOS-2021-88341", "2021-03-15", 1299.0, "2027-03-15", "Kitchen", "Stainless steel interior", None, None, None, None),
+    ("Refrigerator", "appliances", "Samsung", "SRF801GDLS", "SAM-2020-55219", "2020-08-10", 2499.0, "2025-08-10", "Kitchen", "French door, ice maker", None, None, None, None),
+    ("Washing Machine", "appliances", "LG", "WTR1232C", "LG-2022-33901", "2022-01-20", 999.0, "2027-01-20", "Laundry", "Front loader 8kg", None, None, None, None),
+    ("HVAC System", "HVAC", "Daikin", "FTXM50W", "DAI-2019-70042", "2019-06-01", 3800.0, "2024-06-01", "Whole house", "Split system, 5kW. Warranty expired.", None, None, None, None),
+    ("Hot Water System", "plumbing", "Rheem", "522365", "RHM-2020-19283", "2020-02-14", 1450.0, "2025-02-14", "Outside utility", "Gas continuous flow", None, None, None, None),
+    ("Smoke Alarm - Kitchen", "electrical", "Clipsal", "755PSMA", None, "2021-09-01", 85.0, None, "Kitchen", "Photoelectric + CO", None, None, None, None),
+    ("Smoke Alarm - Hallway", "electrical", "Clipsal", "755PSMA", None, "2021-09-01", 85.0, None, "Hallway", "Photoelectric", None, None, None, None),
+    ("Garage Door Opener", "exterior", "Merlin", "MR865EVO", "MRL-2020-44821", "2020-05-10", 650.0, "2023-05-10", "Garage", "Belt drive, warranty expired", None, None, None, None),
+    ("Lawn Mower", "garden", "Honda", "HRU196M2", "HON-2021-29031", "2021-11-01", 879.0, "2024-11-01", "Shed", "Self-propelled", None, None, None, None),
+    ("Car - Toyota Camry", "vehicle", "Toyota", "Camry 2019 Hybrid", "2T1BURHE0JC037610", "2019-04-15", 38000.0, "2024-04-15", "Garage", "Petrol-electric hybrid, rego due April", None, None, None, None),
+    # Plants and trees
+    ("Lemon Tree", "plants_trees", None, None, None, None, None, None, "Back yard, east corner", "Meyer lemon, in ground", "lemon tree", "large", "2020-09-01", "Full sun, good drainage. Fruiting well."),
+    ("Front Garden Agapanthus", "plants_trees", None, None, None, None, None, None, "Front garden bed", "4 large clumps along the fence", "agapanthus", "mature", "2018-03-01", "Very established, needs dividing"),
+    ("Rose Bush - Red", "plants_trees", None, None, None, None, None, None, "Back yard, near deck", "Climbing rose on trellis", "rose", "large", "2021-11-15", "Needs regular deadheading and rust prevention"),
 ]
 
 SEED_MAINTENANCE = [
@@ -89,14 +97,25 @@ def init_db(path: Path = DB_PATH) -> None:
 
     conn.executescript(DDL)
 
+    # Migrate existing DBs: add plant columns if missing
+    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(assets)").fetchall()}
+    for col, coltype in [
+        ("plant_species", "TEXT"), ("plant_size", "TEXT"),
+        ("planting_date", "TEXT"), ("plant_notes", "TEXT"),
+    ]:
+        if col not in existing_cols:
+            conn.execute(f"ALTER TABLE assets ADD COLUMN {col} {coltype}")
+            print(f"  Migrated: added column '{col}' to assets")
+
     now = "2025-01-01T00:00:00"
     existing = conn.execute("SELECT COUNT(*) FROM assets").fetchone()[0]
     if existing == 0:
         conn.executemany(
             """INSERT INTO assets
                (name, category, brand, model, serial, purchase_date, purchase_price,
-                warranty_expiry, location, notes, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                warranty_expiry, location, notes, plant_species, plant_size,
+                planting_date, plant_notes, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [(*a, now) for a in SEED_ASSETS],
         )
         conn.executemany(

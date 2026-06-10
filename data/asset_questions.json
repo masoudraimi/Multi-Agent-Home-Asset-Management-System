@@ -1,0 +1,71 @@
+{
+  "appliances": [
+    "What brand is it?",
+    "Do you have the model number?",
+    "When did you buy it? (approximate date is fine)",
+    "Do you know the warranty expiry date?",
+    "Where is it located? (e.g. Kitchen, Laundry)",
+    "How much did it cost approximately?"
+  ],
+  "HVAC": [
+    "What type of system is it? (split system, ducted, evaporative cooler, ceiling fan)",
+    "What brand?",
+    "When was it installed?",
+    "What filter type does it use? (e.g. 3M electrostatic, standard panel)",
+    "When was the last professional service?",
+    "Where is the indoor unit located?"
+  ],
+  "plumbing": [
+    "What type? (hot water system, water meter, irrigation, pump, tap)",
+    "What brand or model?",
+    "When was it installed?",
+    "Is it gas, electric, or solar?",
+    "When was the last service?",
+    "Where is it located?"
+  ],
+  "electrical": [
+    "What type? (smoke alarm, switchboard, solar panels, EV charger, ceiling fan)",
+    "What brand or model?",
+    "When was it installed?",
+    "Where is it located?",
+    "Any battery replacement date you know of?"
+  ],
+  "exterior": [
+    "What is it? (gutters, roof, deck, fence, driveway, retaining wall, pool)",
+    "What material? (e.g. Colorbond, timber, concrete, tile)",
+    "When was it installed or last replaced?",
+    "Any known issues or recent work done?",
+    "Where exactly? (front, back, north side, etc.)"
+  ],
+  "vehicle": [
+    "Make and model?",
+    "Year?",
+    "What is the registration plate? (optional)",
+    "When is the next service due? (by date or kilometres)",
+    "When is the registration next due?",
+    "What fuel type? (petrol, diesel, hybrid, EV)",
+    "Current odometer reading? (approximate)"
+  ],
+  "garden": [
+    "What is it? (lawn mower, whipper snipper, chainsaw, irrigation controller)",
+    "What brand?",
+    "When did you buy it?",
+    "Any warranty information?",
+    "Where is it stored?"
+  ],
+  "plants_trees": [
+    "What is the plant or tree? (species or common name, e.g. lemon tree, agapanthus, eucalyptus)",
+    "How big is it approximately? (small / medium / large / mature)",
+    "Where is it planted? (e.g. front yard, back left corner, pot on deck)",
+    "When was it planted or how old is it roughly?",
+    "Any known issues or special care requirements?",
+    "Is it a native species?"
+  ],
+  "other": [
+    "What is it?",
+    "What brand or model?",
+    "When did you get it?",
+    "Any warranty information?",
+    "Where is it located or stored?"
+  ]
+}

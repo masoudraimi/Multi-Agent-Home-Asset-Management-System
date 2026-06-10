@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
-    "openai>=2.41.0",
+    "anthropic>=0.109.1",
+    "claude-agent-sdk>=0.2.96",
+    "httpx>=0.28.1",
+    "mcp>=1.27.2",
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
     "streamlit>=1.58.0",

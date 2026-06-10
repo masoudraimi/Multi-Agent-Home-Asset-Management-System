@@ -30,8 +30,8 @@ with st.sidebar:
     st.caption("AI-powered home maintenance manager")
     st.divider()
 
-    if not os.environ.get("OPENROUTER_API_KEY"):
-        st.error("OPENROUTER_API_KEY not set. Add it to your .env file.")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        st.error("ANTHROPIC_API_KEY not set. Add it to your .env file.")
         st.stop()
 
     st.success("Agent ready")
@@ -41,8 +41,9 @@ with st.sidebar:
 - *What maintenance is due this month?*
 - *When does my dishwasher warranty expire?*
 - *How much have I spent on the car?*
-- *Log that I replaced the HVAC filters today*
-- *Which assets have expired warranties?*
+- *I want to add a new dishwasher*
+- *What plants do I have? When should I fertilise the lemon tree?*
+- *What home assets am I missing?*
 """
     )
 
