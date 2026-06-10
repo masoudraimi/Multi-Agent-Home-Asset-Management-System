@@ -1,0 +1,107 @@
+[
+  {
+    "id": "s01",
+    "tier": "simple",
+    "query": "When does the dishwasher warranty expire?",
+    "expected_tools": ["search_assets"],
+    "expected_answer_contains": ["2027", "dishwasher", "warranty"]
+  },
+  {
+    "id": "s02",
+    "tier": "simple",
+    "query": "List all my appliances.",
+    "expected_tools": ["list_assets"],
+    "expected_answer_contains": ["dishwasher", "refrigerator", "washing"]
+  },
+  {
+    "id": "s03",
+    "tier": "simple",
+    "query": "What maintenance is due in the next 30 days?",
+    "expected_tools": ["get_upcoming_maintenance"],
+    "expected_answer_contains": []
+  },
+  {
+    "id": "s04",
+    "tier": "simple",
+    "query": "What brand is my hot water system?",
+    "expected_tools": ["search_assets"],
+    "expected_answer_contains": ["Rheem"]
+  },
+  {
+    "id": "s05",
+    "tier": "simple",
+    "query": "Show me everything in the garage.",
+    "expected_tools": ["search_assets", "list_assets"],
+    "expected_answer_contains": ["garage"]
+  },
+  {
+    "id": "s06",
+    "tier": "moderate",
+    "query": "Is my HVAC system overdue for a service?",
+    "expected_tools": ["search_assets", "get_asset_history"],
+    "expected_answer_contains": ["HVAC", "service"]
+  },
+  {
+    "id": "s07",
+    "tier": "moderate",
+    "query": "When did I last replace the fridge water filter and when is it next due?",
+    "expected_tools": ["search_assets", "get_asset_history"],
+    "expected_answer_contains": ["filter", "2025"]
+  },
+  {
+    "id": "s08",
+    "tier": "moderate",
+    "query": "How much have I spent on car maintenance in total?",
+    "expected_tools": ["search_assets", "get_asset_history"],
+    "expected_answer_contains": ["$", "car"]
+  },
+  {
+    "id": "s09",
+    "tier": "moderate",
+    "query": "Which assets have expired warranties?",
+    "expected_tools": ["list_assets"],
+    "expected_answer_contains": ["warranty"]
+  },
+  {
+    "id": "s10",
+    "tier": "moderate",
+    "query": "Add a note to the HVAC that it needs a gas top-up at the next service.",
+    "expected_tools": ["search_assets", "update_asset"],
+    "expected_answer_contains": ["updated", "HVAC"]
+  },
+  {
+    "id": "s11",
+    "tier": "complex",
+    "query": "What is my total maintenance spend this year, broken down by category?",
+    "expected_tools": ["list_assets", "get_asset_history"],
+    "expected_answer_contains": ["total", "$"]
+  },
+  {
+    "id": "s12",
+    "tier": "complex",
+    "query": "Which of my assets has cost me the most to maintain overall?",
+    "expected_tools": ["list_assets", "get_asset_history"],
+    "expected_answer_contains": ["$"]
+  },
+  {
+    "id": "s13",
+    "tier": "complex",
+    "query": "Give me a full health summary of all my HVAC and plumbing assets.",
+    "expected_tools": ["list_assets", "get_asset_history", "get_upcoming_maintenance"],
+    "expected_answer_contains": ["HVAC", "plumbing"]
+  },
+  {
+    "id": "s14",
+    "tier": "complex",
+    "query": "Log that I replaced the HVAC filters today at a cost of $40. Set the next due date in 90 days.",
+    "expected_tools": ["search_assets", "log_maintenance"],
+    "expected_answer_contains": ["logged", "filter", "HVAC"]
+  },
+  {
+    "id": "s15",
+    "tier": "complex",
+    "query": "What maintenance tasks across all my assets are overdue or due within the next 2 weeks? For each, tell me the last time it was done.",
+    "expected_tools": ["get_upcoming_maintenance", "get_asset_history"],
+    "expected_answer_contains": []
+  }
+]

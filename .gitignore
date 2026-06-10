@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets
+.env
+
+# Data
+data/home_assets.db
+
+# Eval output
+eval/results.json
+
+# macOS
+.DS_Store
