@@ -7,6 +7,24 @@ DB_PATH = Path(__file__).parent / "data" / "home_assets.db"
 
 
 DDL = """
+CREATE TABLE IF NOT EXISTS agent_memory (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_name  TEXT NOT NULL,
+    key         TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    UNIQUE(agent_name, key)
+);
+
+CREATE TABLE IF NOT EXISTS semantic_memory (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_name  TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    embedding   TEXT NOT NULL,
+    metadata    TEXT,
+    created_at  TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS assets (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT NOT NULL,

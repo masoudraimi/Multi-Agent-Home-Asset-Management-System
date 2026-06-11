@@ -5,8 +5,10 @@ import pandas as pd
 import streamlit as st
 
 RESULTS_PATH = Path(__file__).parent.parent / "eval" / "results.json"
+BENCHMARKS_ROOT = Path(__file__).parent.parent / "eval" / "benchmarks"
 
 _TIER_ORDER = ["simple", "moderate", "complex"]
+_AGENTS = ["asset_agent", "maintenance_agent", "orchestrator"]
 
 
 def render_performance_tab() -> None:
@@ -17,17 +19,46 @@ def render_performance_tab() -> None:
 
     st.divider()
 
-    # Offline benchmark results
-    st.subheader("Benchmark Results")
+    # Per-agent benchmark scenarios (static overview from JSON files)
+    st.subheader("Agent Benchmarks")
+    _render_agent_benchmarks()
+
+    st.divider()
+
+    # Offline benchmark results (from eval/run_eval.py)
+    st.subheader("Benchmark Run Results")
     if not RESULTS_PATH.exists():
         st.info(
-            "No benchmark results yet. Run `python eval/run_eval.py` to generate them."
+            "No benchmark results yet. Run `uv run python eval/run_eval.py` to generate them."
         )
         return
 
     data = json.loads(RESULTS_PATH.read_text())
     _render_summary(data["summary"])
     _render_results_table(data["results"])
+
+
+def _render_agent_benchmarks() -> None:
+    """Show benchmark scenario counts and sample queries per agent."""
+    tabs = st.tabs([a.replace("_", " ").title() for a in _AGENTS])
+    for tab, agent_name in zip(tabs, _AGENTS):
+        with tab:
+            bench_path = BENCHMARKS_ROOT / f"{agent_name}.json"
+            if not bench_path.exists():
+                st.caption("No benchmark file found.")
+                continue
+            scenarios = json.loads(bench_path.read_text())
+            st.metric("Scenarios", len(scenarios))
+            rows = [
+                {
+                    "ID": s["id"],
+                    "Query": s["query"],
+                    "Expected Tools": ", ".join(s.get("expected_tools", [])) or "(none)",
+                    "Description": s.get("description", ""),
+                }
+                for s in scenarios
+            ]
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
 def _render_session_metrics() -> None:

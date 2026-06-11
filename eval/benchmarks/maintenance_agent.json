@@ -1,0 +1,37 @@
+[
+  {
+    "id": "maint_001",
+    "query": "What maintenance tasks are overdue this month?",
+    "expected_tools": ["list_maintenance_tasks"],
+    "expected_answer_contains": ["overdue", "task"],
+    "description": "Overdue task listing"
+  },
+  {
+    "id": "maint_002",
+    "query": "What is the recommended service interval for my split system air conditioner?",
+    "expected_tools": [],
+    "expected_answer_contains": ["90", "filter", "service"],
+    "description": "Policy-based schedule lookup from knowledge base"
+  },
+  {
+    "id": "maint_003",
+    "query": "I have a monstera plant. Create a care schedule for it.",
+    "expected_tools": [],
+    "expected_answer_contains": ["watering", "monstera", "days"],
+    "description": "Plant care schedule generation"
+  },
+  {
+    "id": "maint_004",
+    "query": "Send me a maintenance digest for the week.",
+    "expected_tools": ["list_assets", "list_maintenance_tasks"],
+    "expected_answer_contains": ["digest", "task"],
+    "description": "Telegram digest workflow"
+  },
+  {
+    "id": "maint_005",
+    "query": "Mark the dishwasher descale as completed today.",
+    "expected_tools": ["complete_maintenance_task"],
+    "expected_answer_contains": ["completed", "descale", "dishwasher"],
+    "description": "Task completion update"
+  }
+]

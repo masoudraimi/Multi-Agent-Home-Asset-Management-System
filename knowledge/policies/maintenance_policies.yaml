@@ -1,0 +1,57 @@
+# Manufacturer-recommended service intervals (fallback when asset has no maintenance history)
+appliances:
+  dishwasher:
+    descale_filter: {interval_days: 365, notes: "Annual descale and filter clean"}
+    check_door_seals: {interval_days: 365, notes: "Inspect seals for wear or mould"}
+  refrigerator:
+    clean_condenser_coils: {interval_days: 365, notes: "Vacuum dust from coils annually"}
+    replace_water_filter: {interval_days: 180, notes: "6-month filter replacement"}
+  washing_machine:
+    clean_drum: {interval_days: 90, notes: "Machine cleaner tablet quarterly"}
+    check_hoses: {interval_days: 365, notes: "Inspect for bulging or cracking"}
+  dryer:
+    clean_lint_filter: {interval_days: 7, notes: "Clean lint filter after every use"}
+    clean_exhaust_duct: {interval_days: 365, notes: "Annual duct cleaning"}
+
+HVAC:
+  split_system:
+    replace_filters: {interval_days: 90, notes: "3M electrostatic or equivalent"}
+    annual_service: {interval_days: 365, notes: "Professional gas check and coil clean"}
+  ducted:
+    replace_filters: {interval_days: 90, notes: "Check and replace return air filters"}
+    annual_service: {interval_days: 365, notes: "Duct inspection and system service"}
+  evaporative:
+    clean_pads: {interval_days: 365, notes: "Annual pad replacement before summer"}
+    service: {interval_days: 365, notes: "Pre-season service and water check"}
+
+plumbing:
+  hot_water_gas:
+    annual_service: {interval_days: 365, notes: "Gas check and anode inspection"}
+    anode_replacement: {interval_days: 1825, notes: "Replace sacrificial anode every 5 years"}
+  hot_water_electric:
+    annual_service: {interval_days: 365, notes: "Check pressure relief valve and element"}
+    anode_replacement: {interval_days: 1825, notes: "Replace sacrificial anode every 5 years"}
+
+electrical:
+  smoke_alarm:
+    test: {interval_days: 180, notes: "Test alarm button every 6 months"}
+    battery_replacement: {interval_days: 365, notes: "Replace 9V battery annually"}
+    unit_replacement: {interval_days: 3650, notes: "Replace whole unit every 10 years"}
+  carbon_monoxide_detector:
+    test: {interval_days: 180, notes: "Test button every 6 months"}
+    battery_replacement: {interval_days: 365, notes: "Replace battery annually"}
+
+vehicle:
+  default:
+    scheduled_service: {interval_days: 180, notes: "6-month or 10,000km service"}
+    tyre_rotation: {interval_days: 180, notes: "Rotate every 10,000km"}
+    registration: {interval_days: 365, notes: "Annual registration renewal"}
+    tyre_pressure_check: {interval_days: 30, notes: "Check tyre pressure monthly"}
+
+exterior:
+  gutters:
+    clean: {interval_days: 180, notes: "Clean gutters and downpipes twice yearly"}
+  roof:
+    inspect: {interval_days: 365, notes: "Annual visual inspection for damage or moss"}
+  deck:
+    oil_or_stain: {interval_days: 730, notes: "Re-oil or re-stain hardwood deck every 2 years"}

@@ -1,0 +1,18 @@
+name: orchestrator
+model: claude-haiku-4-5-20251001
+max_turns: 5
+description: Routes user intent to specialist agents. Handles compound queries in parallel.
+tools: []
+skills: []
+can_delegate_to:
+  - asset
+  - maintenance
+  - insights
+memory:
+  short_term: true
+  long_term: false
+  semantic: false
+guardrails:
+  pii_detection: true
+  prompt_injection: true
+  max_output_chars: 32000
