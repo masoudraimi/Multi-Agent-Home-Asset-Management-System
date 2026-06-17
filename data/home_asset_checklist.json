@@ -1,0 +1,52 @@
+{
+  "exterior": [
+    {"name": "Gutters and downpipes", "priority": "high", "reason": "Blocked gutters cause water damage to walls and foundations"},
+    {"name": "Roof", "priority": "high", "reason": "Annual inspection catches leaks early"},
+    {"name": "Retaining walls", "priority": "high", "reason": "Structural failure is costly — regular inspection needed"},
+    {"name": "Fence", "priority": "medium", "reason": "Track condition and boundary responsibility"},
+    {"name": "Deck or pergola", "priority": "medium", "reason": "Timber decks need oiling and termite checks"},
+    {"name": "Driveway", "priority": "low", "reason": "Crack sealing prevents costly replacement"},
+    {"name": "Pool or spa", "priority": "high", "reason": "Requires regular chemical balancing and pump maintenance"},
+    {"name": "Letterbox", "priority": "low", "reason": "Often overlooked"}
+  ],
+  "HVAC": [
+    {"name": "Ducted heating system", "priority": "high", "reason": "Annual service critical for gas safety"},
+    {"name": "Split system air conditioner", "priority": "high", "reason": "Filter cleaning every 3 months improves efficiency"},
+    {"name": "Evaporative cooler", "priority": "high", "reason": "Needs annual service before summer"},
+    {"name": "Exhaust fans (bathroom/kitchen)", "priority": "medium", "reason": "Reduces mould risk — clean annually"},
+    {"name": "Ceiling fans", "priority": "low", "reason": "Dust buildup reduces efficiency"}
+  ],
+  "plumbing": [
+    {"name": "Hot water system", "priority": "high", "reason": "Anode replacement every 5 years prevents tank failure"},
+    {"name": "Irrigation / watering system", "priority": "medium", "reason": "Track last service and winterisation"},
+    {"name": "External tap / hose reel", "priority": "low", "reason": "Track condition"},
+    {"name": "Sump pump", "priority": "high", "reason": "Failure during a storm causes flooding — test annually"}
+  ],
+  "electrical": [
+    {"name": "Smoke alarms", "priority": "high", "reason": "Battery replacement every 12 months — legally required"},
+    {"name": "Carbon monoxide detector", "priority": "high", "reason": "Critical for gas appliance homes"},
+    {"name": "Switchboard / circuit breakers", "priority": "high", "reason": "Inspect for signs of burning or outdated fuses"},
+    {"name": "Solar panels", "priority": "medium", "reason": "Annual cleaning and inverter check"},
+    {"name": "EV charger", "priority": "medium", "reason": "Track installation date and cable condition"}
+  ],
+  "appliances": [
+    {"name": "Refrigerator", "priority": "high", "reason": "Coil cleaning and filter replacement often missed"},
+    {"name": "Dishwasher", "priority": "high", "reason": "Descaling prevents costly repairs"},
+    {"name": "Washing machine", "priority": "high", "reason": "Drum cleaning prevents mould"},
+    {"name": "Dryer", "priority": "high", "reason": "Lint trap and duct cleaning is a fire hazard if missed"},
+    {"name": "Oven / cooktop", "priority": "medium", "reason": "Track age and service history"},
+    {"name": "Rangehood", "priority": "medium", "reason": "Filter cleaning every 3–6 months"}
+  ],
+  "plants_trees": [
+    {"name": "Front garden trees", "priority": "high", "reason": "Large trees near structures need regular arborist check"},
+    {"name": "Fruit trees", "priority": "high", "reason": "Pruning, fertilising and pest management are seasonal"},
+    {"name": "Backyard shade trees", "priority": "medium", "reason": "Prune before storm season"},
+    {"name": "Garden beds", "priority": "medium", "reason": "Mulching and fertilising calendar keeps them productive"},
+    {"name": "Lawn", "priority": "medium", "reason": "Track aeration and fertilisation schedule"}
+  ],
+  "vehicle": [
+    {"name": "Car", "priority": "high", "reason": "Service and registration reminders are high-value"},
+    {"name": "Bicycle", "priority": "low", "reason": "Annual chain and brake service"},
+    {"name": "Trailer", "priority": "medium", "reason": "Registration and bearing service"}
+  ]
+}

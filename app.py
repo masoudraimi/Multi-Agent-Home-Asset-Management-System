@@ -16,6 +16,7 @@ st.set_page_config(
 
 from components.assets_tab import render_assets_tab
 from components.chat_tab import render_chat_tab
+from components.observability_tab import render_observability_tab
 from components.performance_tab import render_performance_tab
 from components.schedule_tab import render_schedule_tab
 from db_init import DB_PATH, init_db
@@ -24,14 +25,21 @@ from db_init import DB_PATH, init_db
 if not DB_PATH.exists():
     init_db()
 
+# Index knowledge base into semantic memory (no-op if already indexed)
+try:
+    from knowledge.rag.indexer import index_all
+    index_all()
+except Exception:
+    pass
+
 # Sidebar
 with st.sidebar:
     st.title("🏠 Home Asset Agent")
     st.caption("AI-powered home maintenance manager")
     st.divider()
 
-    if not os.environ.get("OPENROUTER_API_KEY"):
-        st.error("OPENROUTER_API_KEY not set. Add it to your .env file.")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        st.error("ANTHROPIC_API_KEY not set. Add it to your .env file.")
         st.stop()
 
     st.success("Agent ready")
@@ -41,8 +49,9 @@ with st.sidebar:
 - *What maintenance is due this month?*
 - *When does my dishwasher warranty expire?*
 - *How much have I spent on the car?*
-- *Log that I replaced the HVAC filters today*
-- *Which assets have expired warranties?*
+- *I want to add a new dishwasher*
+- *What plants do I have? When should I fertilise the lemon tree?*
+- *What home assets am I missing?*
 """
     )
 
@@ -52,8 +61,8 @@ with st.sidebar:
         st.rerun()
 
 # Tabs
-tab_chat, tab_assets, tab_schedule, tab_performance = st.tabs([
-    "💬 Chat", "📦 Assets", "🗓 Schedule", "📊 Performance"
+tab_chat, tab_assets, tab_schedule, tab_performance, tab_obs = st.tabs([
+    "💬 Chat", "📦 Assets", "🗓 Schedule", "📊 Performance", "🔭 Observability"
 ])
 
 with tab_chat:
@@ -67,3 +76,6 @@ with tab_schedule:
 
 with tab_performance:
     render_performance_tab()
+
+with tab_obs:
+    render_observability_tab()

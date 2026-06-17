@@ -1,0 +1,19 @@
+name: maintenance
+model: claude-sonnet-4-6
+max_turns: 20
+description: Handles maintenance scheduling, plant care, and Telegram digest delivery.
+tools:
+  - home-assets
+skills:
+  - plant_care
+  - telegram_digest
+  - scheduling
+can_delegate_to: []
+memory:
+  short_term: true
+  long_term: true
+  semantic: true
+guardrails:
+  pii_detection: false
+  prompt_injection: true
+  max_output_chars: 16000

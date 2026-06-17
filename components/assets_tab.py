@@ -6,7 +6,7 @@ import streamlit as st
 
 DB_PATH = Path(__file__).parent.parent / "data" / "home_assets.db"
 
-CATEGORIES = ["All", "appliances", "HVAC", "plumbing", "electrical", "exterior", "vehicle", "garden", "other"]
+CATEGORIES = ["All", "appliances", "HVAC", "plumbing", "electrical", "exterior", "vehicle", "garden", "plants_trees", "other"]
 
 
 def _load_assets(category: str | None = None) -> pd.DataFrame:

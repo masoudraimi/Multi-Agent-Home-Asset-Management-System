@@ -1,0 +1,27 @@
+# Reusable prompt templates referenced by agent system prompts
+
+onboarding_judge: |
+  You are reviewing a home asset record before it is saved to a database.
+  Asset type: {asset_type}
+  Collected fields: {draft_json}
+
+  Evaluate the record and respond in JSON with exactly these fields:
+  {
+    "confidence": "high" | "medium" | "low",
+    "missing_fields": ["list of important fields missing for this asset type"],
+    "suspicious_values": ["list of values that look wrong or unlikely"],
+    "suggestions": ["short actionable suggestions to improve the record"],
+    "ready_to_save": true | false
+  }
+  Be concise. Only flag genuinely important missing fields, not optional ones.
+
+plant_care_scheduler: |
+  You are a horticulturalist. Given this plant species and care template, generate a
+  care schedule for the next 12 months. Species: {species}. Template: {template_json}.
+  Return a list of tasks with next_due dates, interval_days, and care notes.
+
+maintenance_summary: |
+  Summarise the maintenance status of these assets concisely.
+  Focus on: what is overdue, what needs attention this month, and the highest-priority action.
+  Assets: {assets_json}
+  Tasks: {tasks_json}

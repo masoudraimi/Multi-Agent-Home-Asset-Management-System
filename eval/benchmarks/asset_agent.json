@@ -1,0 +1,38 @@
+[
+  {
+    "id": "asset_001",
+    "query": "What appliances do I have in my home?",
+    "expected_tools": ["list_assets"],
+    "expected_answer_contains": ["appliance", "asset"],
+    "description": "Simple asset listing query"
+  },
+  {
+    "id": "asset_002",
+    "query": "I want to add a new washing machine. It's a Samsung WW90T, bought in March 2024 for $1200.",
+    "expected_tools": ["add_asset"],
+    "expected_answer_contains": ["washing machine", "Samsung", "saved"],
+    "description": "Asset onboarding with full details triggers human approval",
+    "expect_human_approval": true
+  },
+  {
+    "id": "asset_003",
+    "query": "Show me all assets with expired warranties.",
+    "expected_tools": ["list_assets"],
+    "expected_answer_contains": ["warranty", "expired"],
+    "description": "Warranty expiry query"
+  },
+  {
+    "id": "asset_004",
+    "query": "What appliances am I missing compared to a typical home?",
+    "expected_tools": ["get_suggestions"],
+    "expected_answer_contains": ["suggest", "missing"],
+    "description": "Suggestions workflow triggered by gap query"
+  },
+  {
+    "id": "asset_005",
+    "query": "Update the purchase price of my dishwasher to $950.",
+    "expected_tools": ["update_asset"],
+    "expected_answer_contains": ["updated", "dishwasher"],
+    "description": "Asset update operation"
+  }
+]

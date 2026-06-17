@@ -1,0 +1,37 @@
+[
+  {
+    "id": "orch_001",
+    "query": "What appliances do I have?",
+    "expected_route": ["asset"],
+    "expected_answer_contains": ["asset", "appliance"],
+    "description": "Clear asset query routes to asset agent"
+  },
+  {
+    "id": "orch_002",
+    "query": "What maintenance is overdue and how much have I spent on repairs this year?",
+    "expected_route": ["maintenance", "insights"],
+    "expected_answer_contains": ["overdue", "spend"],
+    "description": "Multi-agent parallel dispatch for maintenance + insights query"
+  },
+  {
+    "id": "orch_003",
+    "query": "My monstera plant needs a watering schedule.",
+    "expected_route": ["maintenance"],
+    "expected_answer_contains": ["watering", "days"],
+    "description": "Plant care query routes to maintenance agent"
+  },
+  {
+    "id": "orch_004",
+    "query": "Give me a full home health report with spend, warranties, and overdue tasks.",
+    "expected_route": ["maintenance", "insights"],
+    "expected_answer_contains": ["warranty", "spend", "overdue"],
+    "description": "Comprehensive report triggers parallel maintenance + insights agents"
+  },
+  {
+    "id": "orch_005",
+    "query": "Add a new Samsung refrigerator I bought last month.",
+    "expected_route": ["asset"],
+    "expected_answer_contains": ["refrigerator", "Samsung"],
+    "description": "Onboarding query routes exclusively to asset agent"
+  }
+]
