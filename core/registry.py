@@ -7,6 +7,8 @@ from pathlib import Path
 
 import yaml
 
+from core.models import DEFAULT
+
 AGENTS_ROOT = Path(__file__).parent.parent / "agents"
 
 
@@ -42,7 +44,7 @@ class AgentRegistry:
                 raw = yaml.safe_load(yaml_path.read_text())
                 cfg = AgentConfig(
                     name=raw["name"],
-                    model=raw.get("model", "claude-sonnet-4-6"),
+                    model=raw.get("model", DEFAULT),
                     max_turns=raw.get("max_turns", 20),
                     description=raw.get("description", ""),
                     tools=raw.get("tools", []),

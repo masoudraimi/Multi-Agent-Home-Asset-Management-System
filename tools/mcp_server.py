@@ -205,6 +205,99 @@ async def _suggest_missing_assets(params: SuggestMissingAssetsInput) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# OpenRouter: tool schemas and direct dispatch (bypasses MCP)
+# ---------------------------------------------------------------------------
+
+_OPENROUTER_TOOL_DEFS: list[tuple[str, str, type[BaseModel]]] = [
+    ("add_asset",
+     "Register a new home asset. Use after completing interactive onboarding. "
+     "Category must be one of: appliances, HVAC, plumbing, electrical, exterior, "
+     "vehicle, garden, plants_trees, other.",
+     AddAssetInput),
+    ("list_assets",
+     "List all home assets, optionally filtered by category.",
+     ListAssetsInput),
+    ("search_assets",
+     "Search assets by name, brand, model, species, or notes.",
+     SearchAssetsInput),
+    ("log_maintenance",
+     "Record a completed maintenance task. Sets next_due_date for future reminders.",
+     LogMaintenanceInput),
+    ("get_upcoming_maintenance",
+     "Get all maintenance tasks due within the next N days, including overdue ones.",
+     GetUpcomingMaintenanceInput),
+    ("get_asset_history",
+     "Get the full maintenance history and total spend for a specific asset.",
+     GetAssetHistoryInput),
+    ("update_asset",
+     "Update one or more fields on an existing asset.",
+     UpdateAssetInput),
+    ("get_onboarding_questions",
+     "Get type-specific guided questions for onboarding a new asset. "
+     "Call this at the start of any 'add new asset' workflow.",
+     GetOnboardingQuestionsInput),
+    ("review_asset_draft",
+     "LLM-as-judge: review a partially-filled asset before saving. "
+     "Returns confidence score, missing fields, and suggestions.",
+     ReviewAssetDraftInput),
+    ("get_plant_care_schedule",
+     "Get a species-specific care schedule for a plant or tree asset. "
+     "Returns upcoming tasks: fertilise, prune, pest check, water, etc.",
+     GetPlantCareScheduleInput),
+    ("suggest_missing_assets",
+     "Suggest commonly-missed home assets by comparing the database to a "
+     "comprehensive checklist. Returns gaps grouped by priority.",
+     SuggestMissingAssetsInput),
+]
+
+
+def get_openai_tool_schemas() -> list[dict]:
+    """Return tool definitions in OpenAI function-calling format."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": desc,
+                "parameters": schema_cls.model_json_schema(),
+            },
+        }
+        for name, desc, schema_cls in _OPENROUTER_TOOL_DEFS
+    ]
+
+
+def dispatch_tool(name: str, args: dict) -> dict:
+    """Execute a tool by name with a raw args dict. Used by the OpenRouter agent loop."""
+    schema_map = {t[0]: t[2] for t in _OPENROUTER_TOOL_DEFS}
+    params = schema_map[name](**args)
+    match name:
+        case "add_asset":
+            return db.add_asset(**params.model_dump(exclude_none=True))
+        case "list_assets":
+            return db.list_assets(category=params.category)
+        case "search_assets":
+            return db.search_assets(query=params.query)
+        case "log_maintenance":
+            return db.log_maintenance(**params.model_dump(exclude_none=True))
+        case "get_upcoming_maintenance":
+            return db.get_upcoming_maintenance(days_ahead=params.days_ahead)
+        case "get_asset_history":
+            return db.get_asset_history(asset_id=params.asset_id)
+        case "update_asset":
+            return db.update_asset(**params.model_dump(exclude_none=True))
+        case "get_onboarding_questions":
+            return db.get_onboarding_questions(asset_type=params.asset_type)
+        case "review_asset_draft":
+            return db.review_asset_draft(draft_json=params.draft_json)
+        case "get_plant_care_schedule":
+            return db.get_plant_care_schedule(asset_id=params.asset_id)
+        case "suggest_missing_assets":
+            return db.suggest_missing_assets()
+        case _:
+            raise ValueError(f"Unknown tool: {name}")
+
+
+# ---------------------------------------------------------------------------
 # Server factory
 # ---------------------------------------------------------------------------
 

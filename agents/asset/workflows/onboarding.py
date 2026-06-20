@@ -3,17 +3,15 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
-import anthropic
+from core.models import simple_complete
 
 from core.event_bus import EventBus
 from core.events import HumanApprovalRequested
 
 QUESTIONS_PATH = Path(__file__).parent.parent.parent.parent / "data" / "asset_questions.json"
 
-_JUDGE_MODEL = "claude-haiku-4-5-20251001"
 
 _SYNONYMS = {
     "plant": "plants_trees", "tree": "plants_trees", "garden plant": "plants_trees",
@@ -53,7 +51,6 @@ def review_asset_draft(draft_json: str) -> dict:
     except json.JSONDecodeError:
         return {"confidence": "low", "missing_fields": [], "suggestions": ["Invalid JSON draft"]}
 
-    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
     asset_type = draft.get("category", "unknown")
 
     prompt = f"""You are reviewing a home asset record before it is saved to a database.
@@ -72,13 +69,7 @@ Evaluate this asset record and respond in JSON with exactly these fields:
 Be concise. For a {asset_type}, the most important fields are: name, category, and either a date or location.
 Only flag genuinely important missing fields, not optional ones."""
 
-    message = client.messages.create(
-        model=_JUDGE_MODEL,
-        max_tokens=400,
-        messages=[{"role": "user", "content": prompt}],
-    )
-
-    raw = message.content[0].text.strip()
+    raw = simple_complete("haiku", 400, prompt)
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):

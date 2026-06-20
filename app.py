@@ -38,7 +38,12 @@ with st.sidebar:
     st.caption("AI-powered home maintenance manager")
     st.divider()
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
+    from core.models import Provider, get_provider
+    _provider = get_provider()
+    if _provider == Provider.OPENROUTER and not os.environ.get("OPENROUTER_API_KEY"):
+        st.error("OPENROUTER_API_KEY not set. Add it to your .env file.")
+        st.stop()
+    elif _provider == Provider.CLAUDE_SDK and not os.environ.get("ANTHROPIC_API_KEY"):
         st.error("ANTHROPIC_API_KEY not set. Add it to your .env file.")
         st.stop()
 
