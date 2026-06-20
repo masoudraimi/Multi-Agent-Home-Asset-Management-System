@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
-import anthropic
+from core.models import HAIKU, anthropic_client
 
 from core.event_bus import EventBus
 from core.events import HumanApprovalRequested
 
 QUESTIONS_PATH = Path(__file__).parent.parent.parent.parent / "data" / "asset_questions.json"
 
-_JUDGE_MODEL = "claude-haiku-4-5-20251001"
+_JUDGE_MODEL = HAIKU
 
 _SYNONYMS = {
     "plant": "plants_trees", "tree": "plants_trees", "garden plant": "plants_trees",
@@ -53,7 +52,7 @@ def review_asset_draft(draft_json: str) -> dict:
     except json.JSONDecodeError:
         return {"confidence": "low", "missing_fields": [], "suggestions": ["Invalid JSON draft"]}
 
-    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+    client = anthropic_client()
     asset_type = draft.get("category", "unknown")
 
     prompt = f"""You are reviewing a home asset record before it is saved to a database.

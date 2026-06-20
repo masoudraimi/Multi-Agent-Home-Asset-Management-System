@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
 
-import anthropic
+from core.models import HAIKU, anthropic_client
 
-_ROUTE_MODEL = "claude-haiku-4-5-20251001"
+_ROUTE_MODEL = HAIKU
 _VALID_AGENTS = {"asset", "maintenance", "insights"}
 
 _ROUTING_PROMPT = """You are a home asset management router. Classify user messages and route them to the right specialist agent.
@@ -30,7 +29,7 @@ User message: {message}"""
 
 def classify_intent(user_message: str) -> list[str]:
     """Classify user intent and return a list of agent names to route to."""
-    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+    client = anthropic_client()
     try:
         resp = client.messages.create(
             model=_ROUTE_MODEL,

@@ -11,9 +11,6 @@ from typing import Generator
 from agent.context import ConversationContext  # noqa: F401
 
 
-MODEL = "claude-sonnet-4-6"
-
-
 def run_turn(
     user_message: str,
     context: ConversationContext,
