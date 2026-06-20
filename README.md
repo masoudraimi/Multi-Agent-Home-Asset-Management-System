@@ -126,7 +126,7 @@ Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. T
 
 **Working memory** — `ConversationContext` tracks asset names and IDs seen in tool results and injects them as a hint on subsequent turns, reducing redundant lookups.
 
-**Provider abstraction** — `core/models.py` exposes `simple_complete()` and `resolve_model()` so callers never hard-code a provider. `BaseAgent` branches between `_run_sdk()` and `_run_openrouter()` based on `LLM_PROVIDER`.
+**Provider abstraction** — `core/models.py` exposes `simple_complete()` and `resolve_model()` so callers never hard-code a provider. `BaseAgent` branches between `_run_cli()`, `_run_sdk()`, and `_run_openrouter()` based on `LLM_PROVIDER`.
 
 **MCP tools** — all 11 tools are defined once in `tools/mcp_server.py` with Pydantic schemas. The same definitions generate both the in-process MCP server (Claude SDK path) and OpenAI function-calling schemas (OpenRouter path).
 
@@ -138,9 +138,10 @@ Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. T
 
 - Python 3.13+
 - `uv` package manager
-- API key for your chosen provider:
-  - Claude SDK: `ANTHROPIC_API_KEY`
-  - OpenRouter: `OPENROUTER_API_KEY`
+- Provider-specific requirement:
+  - **Claude CLI** (default): `claude` CLI installed and authenticated (`claude login`)
+  - **Claude SDK**: `ANTHROPIC_API_KEY` in `.env`
+  - **OpenRouter**: `OPENROUTER_API_KEY` in `.env`
 
 ### Setup
 
@@ -157,11 +158,15 @@ cp .env.example .env
 `.env` example:
 
 ```env
-# Choose one provider
-LLM_PROVIDER=claude_sdk       # or: openrouter
+# Provider — default is claude_cli (no API key needed, uses local claude CLI)
+# LLM_PROVIDER=claude_cli
 
-ANTHROPIC_API_KEY=sk-ant-...  # required for claude_sdk
-OPENROUTER_API_KEY=sk-or-...  # required for openrouter
+# Uncomment one of the below if switching providers:
+# LLM_PROVIDER=claude_sdk
+# ANTHROPIC_API_KEY=sk-ant-...
+
+# LLM_PROVIDER=openrouter
+# OPENROUTER_API_KEY=sk-or-...
 
 # Optional: Telegram digest
 TELEGRAM_BOT_TOKEN=...
