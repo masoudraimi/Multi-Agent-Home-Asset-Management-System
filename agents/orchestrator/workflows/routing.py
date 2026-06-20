@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import json
 
-from core.models import HAIKU, anthropic_client
+from core.models import simple_complete
 
-_ROUTE_MODEL = HAIKU
 _VALID_AGENTS = {"asset", "maintenance", "insights"}
 
 _ROUTING_PROMPT = """You are a home asset management router. Classify user messages and route them to the right specialist agent.
@@ -29,14 +28,8 @@ User message: {message}"""
 
 def classify_intent(user_message: str) -> list[str]:
     """Classify user intent and return a list of agent names to route to."""
-    client = anthropic_client()
     try:
-        resp = client.messages.create(
-            model=_ROUTE_MODEL,
-            max_tokens=50,
-            messages=[{"role": "user", "content": _ROUTING_PROMPT.format(message=user_message)}],
-        )
-        raw = resp.content[0].text.strip()
+        raw = simple_complete("haiku", 50, _ROUTING_PROMPT.format(message=user_message))
         routes = json.loads(raw)
         if isinstance(routes, list):
             valid = [r for r in routes if r in _VALID_AGENTS]

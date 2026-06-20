@@ -1,21 +1,12 @@
-"""BaseAgent: shared agent loop logic for all specialist agents.
-
-Each specialist agent (AssetAgent, MaintenanceAgent, InsightsAgent) extends this
-class and provides its own agent name. The base class handles:
-- Loading config from agent.yaml via AgentRegistry
-- Reading system prompt from prompts/system.md
-- Guardrail checks on input
-- OTel span creation around each turn
-- The claude-agent-sdk query() loop
-- Working memory updates
-"""
+"""BaseAgent: shared agent loop logic for all specialist agents."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
-from typing import AsyncGenerator, Generator
+from typing import Any, AsyncGenerator, Generator
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -32,6 +23,7 @@ from datetime import date
 
 from core.guardrails import Guardrails
 from core.memory.short_term import ConversationContext
+from core.models import Provider, get_provider, resolve_model
 from core.observability import get_tracer
 from core.registry import AgentRegistry
 from tools.mcp_server import build_sdk_server
@@ -86,65 +78,16 @@ class BaseAgent:
         with self.tracer.start_as_current_span(f"{self.agent_name}.run_turn") as span:
             span.set_attribute("agent_name", self.agent_name)
             span.set_attribute("model", self.config.model)
-
             start = time.monotonic()
-            system = self._system_prompt + context.working_memory_hint
-            options = ClaudeAgentOptions(
-                model=self.config.model,
-                system_prompt=system,
-                permission_mode="bypassPermissions",
-                mcp_servers={"home-assets": build_sdk_server()},
-                disallowed_tools=["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "Read"],
-                max_turns=self.config.max_turns,
-            )
 
-            prompt = context.format_prompt(user_message)
-            pending_tool_calls: dict[str, str] = {}
-            final_text = ""
-            total_tokens = 0
-            tool_call_count = 0
-
-            async for msg in query(prompt=prompt, options=options):
-                if isinstance(msg, AssistantMessage):
-                    for block in msg.content:
-                        if isinstance(block, TextBlock):
-                            final_text = block.text
-
-                        elif isinstance(block, ThinkingBlock):
-                            pass
-
-                        elif isinstance(block, ToolUseBlock):
-                            tool_call_count += 1
-                            pending_tool_calls[block.id] = block.name
-                            span.add_event("tool_call", {"tool": block.name})
-                            events.append({
-                                "type": "tool_call",
-                                "name": block.name,
-                                "args": block.input,
-                                "call_id": block.id,
-                            })
-
-                        elif isinstance(block, ToolResultBlock):
-                            tool_name = pending_tool_calls.get(block.tool_use_id, "unknown")
-                            result_content = block.content or ""
-                            _update_working_memory(context, tool_name, result_content)
-                            events.append({
-                                "type": "tool_result",
-                                "name": tool_name,
-                                "call_id": block.tool_use_id,
-                                "result": result_content,
-                            })
-
-                    if msg.usage:
-                        total_tokens = (
-                            msg.usage.get("input_tokens", 0) + msg.usage.get("output_tokens", 0)
-                        )
-
-                elif isinstance(msg, ResultMessage):
-                    if msg.usage:
-                        total_tokens = (
-                            msg.usage.get("input_tokens", 0) + msg.usage.get("output_tokens", 0)
-                        )
+            if get_provider() == Provider.OPENROUTER:
+                final_text, total_tokens, tool_call_count = await self._run_openrouter(
+                    user_message, context, events, span
+                )
+            else:
+                final_text, total_tokens, tool_call_count = await self._run_sdk(
+                    user_message, context, events, span
+                )
 
             if final_text:
                 sanitized = self.guardrails.sanitize_output(final_text)
@@ -163,6 +106,168 @@ class BaseAgent:
                 "tool_call_count": tool_call_count,
                 "agent": self.agent_name,
             })
+
+    async def _run_sdk(
+        self,
+        user_message: str,
+        context: ConversationContext,
+        events: list[dict],
+        span: Any,
+    ) -> tuple[str, int, int]:
+        system = self._system_prompt + context.working_memory_hint
+        options = ClaudeAgentOptions(
+            model=self.config.model,
+            system_prompt=system,
+            permission_mode="bypassPermissions",
+            mcp_servers={"home-assets": build_sdk_server()},
+            disallowed_tools=["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "Read"],
+            max_turns=self.config.max_turns,
+        )
+
+        prompt = context.format_prompt(user_message)
+        pending_tool_calls: dict[str, str] = {}
+        final_text = ""
+        total_tokens = 0
+        tool_call_count = 0
+
+        async for msg in query(prompt=prompt, options=options):
+            if isinstance(msg, AssistantMessage):
+                for block in msg.content:
+                    if isinstance(block, TextBlock):
+                        final_text = block.text
+
+                    elif isinstance(block, ThinkingBlock):
+                        pass
+
+                    elif isinstance(block, ToolUseBlock):
+                        tool_call_count += 1
+                        pending_tool_calls[block.id] = block.name
+                        span.add_event("tool_call", {"tool": block.name})
+                        events.append({
+                            "type": "tool_call",
+                            "name": block.name,
+                            "args": block.input,
+                            "call_id": block.id,
+                        })
+
+                    elif isinstance(block, ToolResultBlock):
+                        tool_name = pending_tool_calls.get(block.tool_use_id, "unknown")
+                        result_content = block.content or ""
+                        _update_working_memory(context, tool_name, result_content)
+                        events.append({
+                            "type": "tool_result",
+                            "name": tool_name,
+                            "call_id": block.tool_use_id,
+                            "result": result_content,
+                        })
+
+                if msg.usage:
+                    total_tokens = (
+                        msg.usage.get("input_tokens", 0) + msg.usage.get("output_tokens", 0)
+                    )
+
+            elif isinstance(msg, ResultMessage):
+                if msg.usage:
+                    total_tokens = (
+                        msg.usage.get("input_tokens", 0) + msg.usage.get("output_tokens", 0)
+                    )
+
+        return final_text, total_tokens, tool_call_count
+
+    async def _run_openrouter(
+        self,
+        user_message: str,
+        context: ConversationContext,
+        events: list[dict],
+        span: Any,
+    ) -> tuple[str, int, int]:
+        from openai import AsyncOpenAI
+        from tools.mcp_server import dispatch_tool, get_openai_tool_schemas
+
+        client = AsyncOpenAI(
+            api_key=os.environ.get("OPENROUTER_API_KEY", ""),
+            base_url="https://openrouter.ai/api/v1",
+        )
+        logical = "haiku" if "haiku" in self.config.model else "sonnet"
+        model = resolve_model(logical)
+        tool_schemas = get_openai_tool_schemas()
+
+        messages: list[dict] = [
+            {"role": "system", "content": self._system_prompt + context.working_memory_hint},
+            {"role": "user", "content": context.format_prompt(user_message)},
+        ]
+
+        final_text = ""
+        total_tokens = 0
+        tool_call_count = 0
+
+        for _ in range(self.config.max_turns):
+            resp = await client.chat.completions.create(
+                model=model,
+                max_tokens=4096,
+                messages=messages,
+                tools=tool_schemas,
+            )
+
+            if resp.usage:
+                total_tokens += resp.usage.prompt_tokens + resp.usage.completion_tokens
+
+            msg = resp.choices[0].message
+
+            if msg.tool_calls:
+                messages.append({
+                    "role": "assistant",
+                    "content": msg.content,
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in msg.tool_calls
+                    ],
+                })
+
+                for tc in msg.tool_calls:
+                    tool_name = tc.function.name
+                    tool_args = json.loads(tc.function.arguments)
+                    tool_call_count += 1
+                    span.add_event("tool_call", {"tool": tool_name})
+
+                    events.append({
+                        "type": "tool_call",
+                        "name": tool_name,
+                        "args": tool_args,
+                        "call_id": tc.id,
+                    })
+
+                    try:
+                        result = dispatch_tool(tool_name, tool_args)
+                        result_str = json.dumps(result)
+                    except Exception as exc:
+                        result_str = json.dumps({"error": str(exc)})
+
+                    _update_working_memory(context, tool_name, result_str)
+                    events.append({
+                        "type": "tool_result",
+                        "name": tool_name,
+                        "call_id": tc.id,
+                        "result": result_str,
+                    })
+
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result_str,
+                    })
+            else:
+                final_text = msg.content or ""
+                break
+
+        return final_text, total_tokens, tool_call_count
 
 
 def _update_working_memory(context: ConversationContext, tool_name: str, result: object) -> None:
