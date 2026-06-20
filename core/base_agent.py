@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
+import tempfile
 import time
 from typing import Any, AsyncGenerator, Generator
 
@@ -80,7 +82,12 @@ class BaseAgent:
             span.set_attribute("model", self.config.model)
             start = time.monotonic()
 
-            if get_provider() == Provider.OPENROUTER:
+            provider = get_provider()
+            if provider == Provider.CLAUDE_CLI:
+                final_text, total_tokens, tool_call_count = await self._run_cli(
+                    user_message, context, events, span
+                )
+            elif provider == Provider.OPENROUTER:
                 final_text, total_tokens, tool_call_count = await self._run_openrouter(
                     user_message, context, events, span
                 )
@@ -171,6 +178,117 @@ class BaseAgent:
                     total_tokens = (
                         msg.usage.get("input_tokens", 0) + msg.usage.get("output_tokens", 0)
                     )
+
+        return final_text, total_tokens, tool_call_count
+
+    async def _run_cli(
+        self,
+        user_message: str,
+        context: ConversationContext,
+        events: list[dict],
+        span: Any,
+    ) -> tuple[str, int, int]:
+        """Invoke the claude CLI as a subprocess with an stdio MCP server for tools."""
+        mcp_config = {
+            "mcpServers": {
+                "home-assets": {
+                    "command": sys.executable,
+                    "args": ["-m", "tools.stdio_server"],
+                }
+            }
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(mcp_config, f)
+            config_path = f.name
+
+        try:
+            cmd = [
+                "claude",
+                "--model", self.config.model,
+                "--system-prompt", self._system_prompt + context.working_memory_hint,
+                "--mcp-config", config_path,
+                "--disallowedTools", "Bash,Write,Edit,MultiEdit,NotebookEdit,Read",
+                "--max-turns", str(self.config.max_turns),
+                "--output-format", "stream-json",
+                "-p", context.format_prompt(user_message),
+            ]
+
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            pending_tool_calls: dict[str, str] = {}
+            final_text = ""
+            total_tokens = 0
+            tool_call_count = 0
+
+            async for raw_line in proc.stdout:
+                line = raw_line.decode().strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                etype = event.get("type")
+
+                if etype == "assistant":
+                    msg = event.get("message", {})
+                    for block in msg.get("content", []):
+                        btype = block.get("type")
+                        if btype == "text":
+                            final_text = block.get("text", "")
+                        elif btype == "tool_use":
+                            tool_call_count += 1
+                            call_id = block["id"]
+                            tool_name = block["name"]
+                            pending_tool_calls[call_id] = tool_name
+                            span.add_event("tool_call", {"tool": tool_name})
+                            events.append({
+                                "type": "tool_call",
+                                "name": tool_name,
+                                "args": block.get("input", {}),
+                                "call_id": call_id,
+                            })
+                    usage = msg.get("usage", {})
+                    total_tokens = (
+                        usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                    )
+
+                elif etype == "user":
+                    for block in event.get("message", {}).get("content", []):
+                        if block.get("type") == "tool_result":
+                            call_id = block.get("tool_use_id", "")
+                            tool_name = pending_tool_calls.get(call_id, "unknown")
+                            result_content = block.get("content", "")
+                            if isinstance(result_content, list):
+                                result_content = " ".join(
+                                    c.get("text", "")
+                                    for c in result_content
+                                    if c.get("type") == "text"
+                                )
+                            _update_working_memory(context, tool_name, result_content)
+                            events.append({
+                                "type": "tool_result",
+                                "name": tool_name,
+                                "call_id": call_id,
+                                "result": result_content,
+                            })
+
+                elif etype == "result":
+                    usage = event.get("usage", {})
+                    total_tokens = (
+                        usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+                    )
+
+            await proc.wait()
+
+        finally:
+            os.unlink(config_path)
 
         return final_text, total_tokens, tool_call_count
 

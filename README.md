@@ -69,22 +69,34 @@ Tools (tools/mcp_server.py)
 
 ## Provider Switching
 
-The agent loop and all LLM calls are provider-agnostic. Switch at runtime via an env var:
+The agent loop and all LLM calls are provider-agnostic. Switch at runtime via a single env var:
 
 ```bash
-# Default — uses the Claude Agent SDK (requires ANTHROPIC_API_KEY)
+LLM_PROVIDER=claude_cli    # default
 LLM_PROVIDER=claude_sdk
-
-# OpenRouter — uses OpenAI-compatible API (requires OPENROUTER_API_KEY)
 LLM_PROVIDER=openrouter
 ```
 
-| Provider | Env var required | Agent loop |
+| Provider | Env var required | How it works |
 |---|---|---|
-| `claude_sdk` | `ANTHROPIC_API_KEY` | `claude_agent_sdk.query()` with in-process MCP |
-| `openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible loop with direct tool dispatch |
+| `claude_sdk` | `ANTHROPIC_API_KEY` | `claude_agent_sdk.query()` — runs the `claude` binary via the Python SDK with an in-process MCP server |
+| `claude_cli` | authenticated `claude` CLI | spawns `claude --output-format stream-json` as a subprocess; tools are served by a separate stdio MCP process (`tools/stdio_server.py`) |
+| `openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible HTTP API; agent loop and tool dispatch are handled entirely in-process |
 
-Model IDs are resolved per-provider in `core/models.py`. The `agent.yaml` files always use Anthropic-native IDs; `resolve_model()` translates them at runtime when OpenRouter is active.
+### How each path works
+
+```text
+claude_sdk     Python → claude_agent_sdk.query() → claude binary (subprocess)
+                                                         └── in-process MCP server
+
+claude_cli     Python → asyncio subprocess (claude CLI)
+                             └── --mcp-config → tools/stdio_server.py (stdio MCP subprocess)
+
+openrouter     Python → openai.AsyncOpenAI → https://openrouter.ai/api/v1
+                             └── tool_calls → dispatch_tool() in-process
+```
+
+Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. The `agent.yaml` files always store Anthropic-native IDs; `resolve_model()` translates to OpenRouter's namespace when needed.
 
 ---
 

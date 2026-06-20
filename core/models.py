@@ -10,11 +10,12 @@ import anthropic
 
 class Provider(str, Enum):
     CLAUDE_SDK = "claude_sdk"
+    CLAUDE_CLI = "claude_cli"
     OPENROUTER = "openrouter"
 
 
 def get_provider() -> Provider:
-    return Provider(os.environ.get("LLM_PROVIDER", Provider.CLAUDE_SDK.value))
+    return Provider(os.environ.get("LLM_PROVIDER", Provider.CLAUDE_CLI.value))
 
 
 # Anthropic-native model IDs — used in agent.yaml configs and with the Claude SDK
@@ -23,10 +24,8 @@ SONNET = "claude-sonnet-4-6"
 DEFAULT = SONNET
 
 _MODEL_IDS: dict[Provider, dict[str, str]] = {
-    Provider.CLAUDE_SDK: {
-        "haiku": HAIKU,
-        "sonnet": SONNET,
-    },
+    Provider.CLAUDE_SDK: {"haiku": HAIKU, "sonnet": SONNET},
+    Provider.CLAUDE_CLI: {"haiku": HAIKU, "sonnet": SONNET},  # CLI uses native Anthropic IDs
     Provider.OPENROUTER: {
         "haiku": "anthropic/claude-haiku-4-5",
         "sonnet": "anthropic/claude-sonnet-4-6",
@@ -45,8 +44,20 @@ def anthropic_client() -> anthropic.Anthropic:
 
 def simple_complete(logical_model: str, max_tokens: int, prompt: str) -> str:
     """Single-turn, provider-aware completion. Returns the response text."""
+    import json
+    import subprocess
     model = resolve_model(logical_model)
-    if get_provider() == Provider.OPENROUTER:
+    provider = get_provider()
+
+    if provider == Provider.CLAUDE_CLI:
+        result = subprocess.run(
+            ["claude", "--model", model, "--output-format", "json", "-p", prompt],
+            capture_output=True, text=True, timeout=60,
+        )
+        data = json.loads(result.stdout)
+        return data.get("result", "")
+
+    if provider == Provider.OPENROUTER:
         from openai import OpenAI
         client = OpenAI(
             api_key=os.environ.get("OPENROUTER_API_KEY", ""),
