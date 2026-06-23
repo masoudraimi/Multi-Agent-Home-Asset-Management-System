@@ -1,10 +1,20 @@
-# Home Asset Agent
+# Multi-Agent Home Asset Management System
 
-A conversational AI agent for managing home assets and maintenance. Track appliances, HVAC, plumbing, vehicles, plants, and more — then ask plain-language questions about warranties, service history, upcoming tasks, and spend analytics.
+[![Python](https://img.shields.io/badge/python-%3E%3D3.13-3776AB?logo=python&logoColor=white)](https://python.org)
+[![uv](https://img.shields.io/badge/uv-package%20manager-DE5FE9)](https://docs.astral.sh/uv)
+[![Streamlit](https://img.shields.io/badge/Streamlit-%3E%3D1.58-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io)
+[![Claude](https://img.shields.io/badge/Claude-Sonnet%204.6%20%2F%20Haiku%204.5-D97757)](https://anthropic.com)
+[![OpenRouter](https://img.shields.io/badge/OpenRouter-compatible-74AA9C)](https://openrouter.ai)
+[![MCP](https://img.shields.io/badge/MCP-11%20tools-6E40C9)](https://modelcontextprotocol.io)
+[![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063)](https://docs.pydantic.dev)
+[![SQLite](https://img.shields.io/badge/SQLite-database-003B57?logo=sqlite&logoColor=white)](https://sqlite.org)
+[![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-tracing-425CC7?logo=opentelemetry&logoColor=white)](https://opentelemetry.io)
+[![pytest](https://img.shields.io/badge/pytest-%3E%3D9.0-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org)
+
+A conversational AI agent for managing home assets and maintenance. Track appliances, HVAC, plumbing, vehicles, plants, and more: then ask plain-language questions about warranties, service history, upcoming tasks, and spend analytics.
 
 Built as both a functional personal tool and a portfolio demonstration of **multi-agent orchestration**, **agentic tool use**, **LLM-as-judge workflows**, and **provider-agnostic design** with the Claude Agent SDK and OpenRouter.
 
----
 
 ## Demo
 
@@ -15,7 +25,7 @@ Agent: [calls get_onboarding_questions]
 
 You:   Bosch Series 6, bought it in March 2023 for $1,200.
 Agent: [calls review_asset_draft] → confidence: high, ready_to_save: true
-       Here's the summary — does this look right?
+       Here's the summary: does this look right?
          Name: Dishwasher, Brand: Bosch, Model: Series 6
          Purchase date: 2023-03-01, Price: $1,200
 
@@ -24,7 +34,6 @@ Agent: [calls add_asset]
        Saved. Also, your HVAC filter replacement is 12 days overdue.
 ```
 
----
 
 ## Architecture
 
@@ -51,7 +60,7 @@ Shared infrastructure (core/)
   └── OTel tracing       per-turn spans with token/latency/tool-call attributes
 
 Tools (tools/mcp_server.py)
-  11 MCP tools over SQLite — add, list, search, update assets;
+  11 MCP tools over SQLite: add, list, search, update assets;
   log and query maintenance; onboarding questions; plant care; spend insights
 ```
 
@@ -65,7 +74,7 @@ Tools (tools/mcp_server.py)
 | Insights | Claude Sonnet | Spend analytics and warranty alerts |
 | Onboarding judge | Claude Haiku | LLM-as-judge completeness review |
 
----
+
 
 ## Provider Switching
 
@@ -79,7 +88,7 @@ LLM_PROVIDER=openrouter
 
 | Provider | Env var required | How it works |
 |---|---|---|
-| `claude_sdk` | `ANTHROPIC_API_KEY` | `claude_agent_sdk.query()` — runs the `claude` binary via the Python SDK with an in-process MCP server |
+| `claude_sdk` | `ANTHROPIC_API_KEY` | `claude_agent_sdk.query()`: runs the `claude` binary via the Python SDK with an in-process MCP server |
 | `claude_cli` | authenticated `claude` CLI | spawns `claude --output-format stream-json` as a subprocess; tools are served by a separate stdio MCP process (`tools/stdio_server.py`) |
 | `openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible HTTP API; agent loop and tool dispatch are handled entirely in-process |
 
@@ -98,7 +107,7 @@ openrouter     Python → openai.AsyncOpenAI → https://openrouter.ai/api/v1
 
 Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. The `agent.yaml` files always store Anthropic-native IDs; `resolve_model()` translates to OpenRouter's namespace when needed.
 
----
+
 
 ## Tech Stack
 
@@ -114,23 +123,23 @@ Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. T
 | Observability | OpenTelemetry |
 | Dependency management | uv |
 
----
+
 
 ## Key Patterns Demonstrated
 
-**Multi-agent orchestration** — the orchestrator classifies intent with a lightweight Haiku call and fans out to one or more specialist agents. Complex queries (e.g. "full home health report") dispatch to multiple agents concurrently.
+**Multi-agent orchestration**: the orchestrator classifies intent with a lightweight Haiku call and fans out to one or more specialist agents. Complex queries (e.g. "full home health report") dispatch to multiple agents concurrently.
 
-**LLM-as-judge** — before saving a new asset, `review_asset_draft` calls Haiku to score completeness, flag suspicious values, and surface missing fields. The agent only calls `add_asset` after the user confirms.
+**LLM-as-judge**: before saving a new asset, `review_asset_draft` calls Haiku to score completeness, flag suspicious values, and surface missing fields. The agent only calls `add_asset` after the user confirms.
 
-**Human-in-the-loop** — `HumanApprovalRequested` events flow through the `EventBus` to render a confirmation card in the Streamlit UI before any write is committed.
+**Human-in-the-loop**: `HumanApprovalRequested` events flow through the `EventBus` to render a confirmation card in the Streamlit UI before any write is committed.
 
-**Working memory** — `ConversationContext` tracks asset names and IDs seen in tool results and injects them as a hint on subsequent turns, reducing redundant lookups.
+**Working memory**: `ConversationContext` tracks asset names and IDs seen in tool results and injects them as a hint on subsequent turns, reducing redundant lookups.
 
-**Provider abstraction** — `core/models.py` exposes `simple_complete()` and `resolve_model()` so callers never hard-code a provider. `BaseAgent` branches between `_run_cli()`, `_run_sdk()`, and `_run_openrouter()` based on `LLM_PROVIDER`.
+**Provider abstraction**: `core/models.py` exposes `simple_complete()` and `resolve_model()` so callers never hard-code a provider. `BaseAgent` branches between `_run_cli()`, `_run_sdk()`, and `_run_openrouter()` based on `LLM_PROVIDER`.
 
-**MCP tools** — all 11 tools are defined once in `tools/mcp_server.py` with Pydantic schemas. The same definitions generate both the in-process MCP server (Claude SDK path) and OpenAI function-calling schemas (OpenRouter path).
+**MCP tools**: all 11 tools are defined once in `tools/mcp_server.py` with Pydantic schemas. The same definitions generate both the in-process MCP server (Claude SDK path) and OpenAI function-calling schemas (OpenRouter path).
 
----
+
 
 ## Getting Started
 
@@ -158,7 +167,7 @@ cp .env.example .env
 `.env` example:
 
 ```env
-# Provider — default is claude_cli (no API key needed, uses local claude CLI)
+# Provider: default is claude_cli (no API key needed, uses local claude CLI)
 # LLM_PROVIDER=claude_cli
 
 # Uncomment one of the below if switching providers:
@@ -189,7 +198,7 @@ uv run python eval/run_eval.py
 
 Benchmarks cover the orchestrator, asset agent, and maintenance agent across simple / moderate / complex scenarios. Results are saved to `eval/results/` and surfaced in the Observability tab.
 
----
+
 
 ## Database Schema
 
@@ -199,7 +208,7 @@ Benchmarks cover the orchestrator, asset agent, and maintenance agent across sim
 
 Asset categories: `appliances`, `HVAC`, `plumbing`, `electrical`, `exterior`, `vehicle`, `garden`, `plants_trees`, `other`
 
----
+
 
 ## Project Structure
 
@@ -220,7 +229,7 @@ home-asset-agent/
 ├── core/
 │   ├── base_agent.py      provider-aware agent loop
 │   ├── models.py          Provider enum, resolve_model(), simple_complete()
-│   ├── registry.py        AgentRegistry — loads agent.yaml configs
+│   ├── registry.py        AgentRegistry: loads agent.yaml configs
 │   ├── memory/            short_term (sliding window), long_term, semantic
 │   ├── guardrails.py      injection detection + output sanitisation
 │   ├── event_bus.py       publish/subscribe for UI events
