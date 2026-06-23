@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      # claude_cli won't work in a container — use claude_sdk or openrouter
+      LLM_PROVIDER: ${LLM_PROVIDER:-claude_sdk}
+    restart: unless-stopped

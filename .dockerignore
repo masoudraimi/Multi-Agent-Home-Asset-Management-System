@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.py[oc]
+.env
+.git/
+data/home_assets.db
+eval/results/
+eval/results.json
+.DS_Store
