@@ -9,5 +9,5 @@ services:
       - .env
     environment:
       # claude_cli won't work in a container — use claude_sdk or openrouter
-      LLM_PROVIDER: ${LLM_PROVIDER:-claude_sdk}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
     restart: unless-stopped
