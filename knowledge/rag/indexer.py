@@ -9,20 +9,15 @@ import json
 from pathlib import Path
 
 from core.memory.semantic import SemanticMemory
+from db_conn import get_client
 
 DATA_ROOT = Path(__file__).parent.parent.parent / "data"
 
 
 def is_indexed(agent_name: str) -> bool:
     """Return True if semantic memory for this agent already has entries."""
-    mem = SemanticMemory(agent_name)
-    import sqlite3
-    from core.memory.semantic import DB_PATH
-    with sqlite3.connect(DB_PATH) as conn:
-        count = conn.execute(
-            "SELECT COUNT(*) FROM semantic_memory WHERE agent_name=?", (agent_name,)
-        ).fetchone()[0]
-    return count > 0
+    result = get_client().table("semantic_memory").select("id", count="exact").eq("agent_name", agent_name).execute()
+    return (result.count or 0) > 0
 
 
 def index_plant_care() -> int:
@@ -36,11 +31,10 @@ def index_plant_care() -> int:
     for species, tasks in plant_care.items():
         if species == "default":
             continue
-        task_parts = []
-        for task_name, cfg in tasks.items():
-            task_parts.append(
-                f"{task_name.replace('_', ' ')}: every {cfg['interval_days']} days. {cfg['notes']}"
-            )
+        task_parts = [
+            f"{task_name.replace('_', ' ')}: every {cfg['interval_days']} days. {cfg['notes']}"
+            for task_name, cfg in tasks.items()
+        ]
         text = f"Plant species: {species}. Care tasks: " + "; ".join(task_parts)
         mem.store(text, metadata={"source": "plant_care", "species": species})
         count += 1
@@ -61,11 +55,7 @@ def index_checklist() -> int:
                 f"{item['name']} ({category}): {item['reason']}. "
                 f"Priority: {item['priority']}."
             )
-            mem.store(text, metadata={
-                "source": "checklist",
-                "category": category,
-                "priority": item["priority"],
-            })
+            mem.store(text, metadata={"source": "checklist", "category": category, "priority": item["priority"]})
             count += 1
     return count
 
@@ -73,17 +63,8 @@ def index_checklist() -> int:
 def index_all(force: bool = False) -> dict[str, int]:
     """Index all data sources. Skips if already indexed (unless force=True)."""
     counts: dict[str, int] = {}
-
-    if force or not is_indexed("maintenance"):
-        counts["plant_care"] = index_plant_care()
-    else:
-        counts["plant_care"] = 0
-
-    if force or not is_indexed("asset"):
-        counts["checklist"] = index_checklist()
-    else:
-        counts["checklist"] = 0
-
+    counts["plant_care"] = index_plant_care() if (force or not is_indexed("maintenance")) else 0
+    counts["checklist"] = index_checklist() if (force or not is_indexed("asset")) else 0
     return counts
 
 

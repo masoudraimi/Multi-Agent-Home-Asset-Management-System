@@ -1,12 +1,11 @@
-"""Long-term memory: key-value store per agent, backed by SQLite agent_memory table."""
+"""Long-term memory: key-value store per agent, backed by the agent_memory table."""
 
 from __future__ import annotations
 
 import json
-import sqlite3
-from pathlib import Path
+from datetime import datetime
 
-DB_PATH = Path(__file__).parent.parent.parent / "data" / "home_assets.db"
+from db_conn import get_client
 
 
 class LongTermMemory:
@@ -14,34 +13,38 @@ class LongTermMemory:
         self.agent_name = agent_name
 
     def set(self, key: str, value: object) -> None:
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute(
-                """INSERT INTO agent_memory (agent_name, key, value, updated_at)
-                   VALUES (?, ?, ?, datetime('now'))
-                   ON CONFLICT(agent_name, key)
-                   DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at""",
-                (self.agent_name, key, json.dumps(value)),
-            )
+        get_client().table("agent_memory").upsert(
+            {
+                "agent_name": self.agent_name,
+                "key": key,
+                "value": json.dumps(value),
+                "updated_at": datetime.now().isoformat(),
+            },
+            on_conflict="agent_name,key",
+        ).execute()
 
     def get(self, key: str, default: object = None) -> object:
-        with sqlite3.connect(DB_PATH) as conn:
-            row = conn.execute(
-                "SELECT value FROM agent_memory WHERE agent_name=? AND key=?",
-                (self.agent_name, key),
-            ).fetchone()
-        return json.loads(row[0]) if row else default
+        rows = (
+            get_client()
+            .table("agent_memory")
+            .select("value")
+            .eq("agent_name", self.agent_name)
+            .eq("key", key)
+            .execute()
+            .data
+        )
+        return json.loads(rows[0]["value"]) if rows else default
 
     def delete(self, key: str) -> None:
-        with sqlite3.connect(DB_PATH) as conn:
-            conn.execute(
-                "DELETE FROM agent_memory WHERE agent_name=? AND key=?",
-                (self.agent_name, key),
-            )
+        get_client().table("agent_memory").delete().eq("agent_name", self.agent_name).eq("key", key).execute()
 
     def get_all(self) -> dict[str, object]:
-        with sqlite3.connect(DB_PATH) as conn:
-            rows = conn.execute(
-                "SELECT key, value FROM agent_memory WHERE agent_name=?",
-                (self.agent_name,),
-            ).fetchall()
-        return {key: json.loads(val) for key, val in rows}
+        rows = (
+            get_client()
+            .table("agent_memory")
+            .select("key, value")
+            .eq("agent_name", self.agent_name)
+            .execute()
+            .data
+        )
+        return {row["key"]: json.loads(row["value"]) for row in rows}

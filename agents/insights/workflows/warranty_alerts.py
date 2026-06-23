@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import date, timedelta
-from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "home_assets.db"
+from db_conn import get_client
 
 
 def get_expiring_warranties(days_ahead: int = 90) -> dict:
@@ -15,32 +13,26 @@ def get_expiring_warranties(days_ahead: int = 90) -> dict:
     cutoff = (today + timedelta(days=days_ahead)).isoformat()
     today_str = today.isoformat()
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    all_assets = (
+        get_client()
+        .table("assets")
+        .select("id, name, category, warranty_expiry, purchase_price")
+        .order("warranty_expiry")
+        .execute()
+        .data
+    )
 
-    all_assets = conn.execute(
-        "SELECT id, name, category, warranty_expiry, purchase_price FROM assets ORDER BY warranty_expiry"
-    ).fetchall()
-    conn.close()
-
-    expired = []
-    expiring_soon = []
-    valid = []
-    unknown = []
-
+    expired, expiring_soon, valid, unknown = [], [], [], []
     for asset in all_assets:
         expiry = asset["warranty_expiry"]
         if not expiry:
-            unknown.append(dict(asset))
+            unknown.append(asset)
         elif expiry < today_str:
-            days_ago = (today - date.fromisoformat(expiry)).days
-            expired.append({**dict(asset), "days_ago": days_ago})
+            expired.append({**asset, "days_ago": (today - date.fromisoformat(expiry)).days})
         elif expiry <= cutoff:
-            days_left = (date.fromisoformat(expiry) - today).days
-            expiring_soon.append({**dict(asset), "days_left": days_left})
+            expiring_soon.append({**asset, "days_left": (date.fromisoformat(expiry) - today).days})
         else:
-            days_left = (date.fromisoformat(expiry) - today).days
-            valid.append({**dict(asset), "days_left": days_left})
+            valid.append({**asset, "days_left": (date.fromisoformat(expiry) - today).days})
 
     return {
         "as_of": today_str,

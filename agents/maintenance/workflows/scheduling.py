@@ -1,17 +1,14 @@
-"""Scheduling workflow: policy-based maintenance schedule generation.
-
-Uses maintenance_policies.yaml as a fallback when an asset has no recorded history.
-"""
+"""Scheduling workflow: policy-based maintenance schedule generation."""
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
 
 import yaml
 
-DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "home_assets.db"
+from db_conn import get_client
+
 POLICIES_PATH = Path(__file__).parent.parent.parent.parent / "knowledge" / "policies" / "maintenance_policies.yaml"
 
 _POLICIES: dict | None = None
@@ -28,12 +25,10 @@ def get_policy_schedule(asset_category: str, asset_model: str | None = None) -> 
     """Return policy-based tasks for an asset type that has no maintenance history."""
     policies = _load_policies()
     category_key = asset_category.lower().replace(" ", "_")
-
     tasks = policies.get(category_key, {})
     if not tasks and asset_model:
         model_key = asset_model.lower().split()[0] if asset_model else ""
         tasks = policies.get(category_key, {}).get(model_key, {})
-
     if not tasks:
         tasks = policies.get(category_key, {}).get("default", {})
 
@@ -43,12 +38,11 @@ def get_policy_schedule(asset_category: str, asset_model: str | None = None) -> 
         if not isinstance(config, dict):
             continue
         interval = config.get("interval_days", 365)
-        next_due = (today + timedelta(days=interval // 2)).isoformat()
         result.append({
             "task": task_name.replace("_", " "),
             "interval_days": interval,
             "notes": config.get("notes", ""),
-            "next_due": next_due,
+            "next_due": (today + timedelta(days=interval // 2)).isoformat(),
             "source": "policy",
         })
     return result
@@ -57,34 +51,30 @@ def get_policy_schedule(asset_category: str, asset_model: str | None = None) -> 
 def suggest_overdue_assets(days_overdue: int = 0) -> dict:
     """Return assets with tasks that are overdue or have never been serviced."""
     today = date.today().isoformat()
+    client = get_client()
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    overdue_rows = (
+        client.table("maintenance_tasks")
+        .select("*, assets!inner(name, category)")
+        .not_.is_("next_due_date", "null")
+        .lt("next_due_date", today)
+        .order("next_due_date")
+        .execute()
+        .data
+    )
+    overdue = []
+    for row in overdue_rows:
+        d = {k: v for k, v in row.items() if k != "assets"}
+        d["asset_name"] = row["assets"]["name"]
+        d["category"] = row["assets"]["category"]
+        overdue.append(d)
 
-    overdue_rows = conn.execute(
-        """SELECT mt.*, a.name as asset_name, a.category
-           FROM maintenance_tasks mt
-           JOIN assets a ON mt.asset_id = a.id
-           WHERE mt.next_due_date IS NOT NULL
-             AND mt.next_due_date < ?
-           ORDER BY mt.next_due_date ASC""",
-        (today,),
-    ).fetchall()
-
-    all_assets = conn.execute(
-        "SELECT id, name, category, created_at FROM assets"
-    ).fetchall()
-    assets_with_tasks = {
+    all_assets = client.table("assets").select("id, name, category, created_at").execute().data
+    serviced_ids = {
         row["asset_id"]
-        for row in conn.execute("SELECT DISTINCT asset_id FROM maintenance_tasks").fetchall()
+        for row in client.table("maintenance_tasks").select("asset_id").execute().data
     }
-    conn.close()
-
-    overdue = [dict(r) for r in overdue_rows]
-    never_serviced = [
-        dict(a) for a in all_assets
-        if a["id"] not in assets_with_tasks
-    ]
+    never_serviced = [a for a in all_assets if a["id"] not in serviced_ids]
 
     return {
         "overdue_tasks": len(overdue),

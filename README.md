@@ -7,11 +7,11 @@
 [![OpenRouter](https://img.shields.io/badge/OpenRouter-compatible-74AA9C)](https://openrouter.ai)
 [![MCP](https://img.shields.io/badge/MCP-11%20tools-6E40C9)](https://modelcontextprotocol.io)
 [![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063)](https://docs.pydantic.dev)
-[![SQLite](https://img.shields.io/badge/SQLite-database-003B57?logo=sqlite&logoColor=white)](https://sqlite.org)
+[![Supabase](https://img.shields.io/badge/Supabase-database-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-tracing-425CC7?logo=opentelemetry&logoColor=white)](https://opentelemetry.io)
 [![pytest](https://img.shields.io/badge/pytest-%3E%3D9.0-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org)
 
-A conversational AI agent for managing home assets and maintenance. Track appliances, HVAC, plumbing, vehicles, plants, and more: then ask plain-language questions about warranties, service history, upcoming tasks, and spend analytics.
+A conversational AI agent for managing home assets and maintenance. Track appliances, HVAC, plumbing, vehicles, plants, and more — then ask plain-language questions about warranties, service history, upcoming tasks, and spend analytics.
 
 Built as both a functional personal tool and a portfolio demonstration of **multi-agent orchestration**, **agentic tool use**, **LLM-as-judge workflows**, and **provider-agnostic design** with the Claude Agent SDK and OpenRouter.
 
@@ -60,7 +60,7 @@ Shared infrastructure (core/)
   └── OTel tracing       per-turn spans with token/latency/tool-call attributes
 
 Tools (tools/mcp_server.py)
-  11 MCP tools over SQLite: add, list, search, update assets;
+  11 MCP tools over Supabase: add, list, search, update assets;
   log and query maintenance; onboarding questions; plant care; spend insights
 ```
 
@@ -116,7 +116,7 @@ Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. T
 | LLM | Claude Sonnet 4.6 / Haiku 4.5 |
 | Agent framework (default) | Claude Agent SDK + in-process MCP |
 | Agent framework (alternate) | OpenAI SDK → OpenRouter |
-| Database | SQLite |
+| Database | Supabase (PostgreSQL) |
 | Tool protocol | MCP (Model Context Protocol) |
 | Data validation | Pydantic v2 |
 | UI | Streamlit |
@@ -147,27 +147,86 @@ Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. T
 
 - Python 3.13+
 - `uv` package manager
+- A [Supabase](https://supabase.com) project (free tier works)
 - Provider-specific requirement:
   - **Claude CLI** (default): `claude` CLI installed and authenticated (`claude login`)
   - **Claude SDK**: `ANTHROPIC_API_KEY` in `.env`
   - **OpenRouter**: `OPENROUTER_API_KEY` in `.env`
 
-### Setup
+### 1. Create the database schema
 
-```bash
-git clone https://github.com/yourusername/home-asset-agent
-cd home-asset-agent
+In your Supabase project, open the **SQL Editor** and run:
 
-uv sync
+```sql
+CREATE TABLE IF NOT EXISTS agent_memory (
+    id          SERIAL PRIMARY KEY,
+    agent_name  TEXT NOT NULL,
+    key         TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    UNIQUE (agent_name, key)
+);
 
-# Copy and fill in your env vars
-cp .env.example .env
+CREATE TABLE IF NOT EXISTS semantic_memory (
+    id          SERIAL PRIMARY KEY,
+    agent_name  TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    embedding   TEXT NOT NULL,
+    metadata    TEXT,
+    created_at  TEXT DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS assets (
+    id              SERIAL PRIMARY KEY,
+    name            TEXT NOT NULL,
+    category        TEXT NOT NULL,
+    brand           TEXT,
+    model           TEXT,
+    serial          TEXT,
+    purchase_date   TEXT,
+    purchase_price  REAL,
+    warranty_expiry TEXT,
+    location        TEXT,
+    notes           TEXT,
+    plant_species   TEXT,
+    plant_size      TEXT,
+    planting_date   TEXT,
+    plant_notes     TEXT,
+    created_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS maintenance_tasks (
+    id              SERIAL PRIMARY KEY,
+    asset_id        INTEGER NOT NULL REFERENCES assets(id),
+    task_name       TEXT NOT NULL,
+    scheduled_date  TEXT,
+    completed_date  TEXT,
+    cost            REAL,
+    notes           TEXT,
+    next_due_date   TEXT,
+    interval_days   INTEGER,
+    created_at      TEXT NOT NULL
+);
 ```
 
-`.env` example:
+### 2. Configure environment variables
+
+```bash
+git clone https://github.com/masoudraimi/Multi-Agent-Home-Asset-Management-System
+cd Multi-Agent-Home-Asset-Management-System
+
+uv sync
+cp .env.example .env   # then fill in your values
+```
+
+`.env`:
 
 ```env
-# Provider: default is claude_cli (no API key needed, uses local claude CLI)
+# Supabase (required) — use the service_role key for backend access
+SUPABASE_URL=https://<your-project-ref>.supabase.co
+SUPABASE_KEY=<your-service-role-key>
+
+# LLM provider (default: claude_cli — no API key needed if claude CLI is authenticated)
 # LLM_PROVIDER=claude_cli
 
 # Uncomment one of the below if switching providers:
@@ -177,18 +236,20 @@ cp .env.example .env
 # LLM_PROVIDER=openrouter
 # OPENROUTER_API_KEY=sk-or-...
 
-# Optional: Telegram digest
-TELEGRAM_BOT_TOKEN=...
-TELEGRAM_CHAT_ID=...
+# Optional: Telegram maintenance digest
+# TELEGRAM_BOT_TOKEN=...
+# TELEGRAM_CHAT_ID=...
 ```
+
+> **Note**: use the `service_role` key (found in Supabase → Project Settings → Data API), not the `publishable`/`anon` key. The service role key bypasses Row Level Security, which is appropriate for a backend app.
+
+### 3. Run the app
 
 ```bash
-# Initialise the database with seed data
-uv run python db_init.py
-
-# Launch the app
 uv run streamlit run app.py
 ```
+
+On first launch, the app automatically seeds the database with 13 sample assets and 19 maintenance records.
 
 ### Run the eval suite
 
@@ -200,11 +261,32 @@ Benchmarks cover the orchestrator, asset agent, and maintenance agent across sim
 
 
 
+## Deploy to Streamlit Community Cloud
+
+1. Push your repo to GitHub
+2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app** → connect your repo
+3. Set the entry point to `app.py`
+4. Under **Secrets**, add:
+
+```toml
+SUPABASE_URL = "https://<your-project-ref>.supabase.co"
+SUPABASE_KEY = "<your-service-role-key>"
+ANTHROPIC_API_KEY = "sk-ant-..."
+```
+
+The app will seed the database on first launch. Data persists in Supabase across deployments.
+
+
+
 ## Database Schema
 
 **assets**: `id`, `name`, `category`, `brand`, `model`, `serial`, `purchase_date`, `purchase_price`, `warranty_expiry`, `location`, `notes`, `plant_species`, `plant_size`, `planting_date`, `plant_notes`
 
 **maintenance_tasks**: `id`, `asset_id`, `task_name`, `completed_date`, `cost`, `notes`, `next_due_date`, `interval_days`
+
+**agent_memory**: per-agent key-value store for long-term memory
+
+**semantic_memory**: embedding-based RAG store for plant care and asset knowledge
 
 Asset categories: `appliances`, `HVAC`, `plumbing`, `electrical`, `exterior`, `vehicle`, `garden`, `plants_trees`, `other`
 
@@ -235,12 +317,13 @@ home-asset-agent/
 │   ├── event_bus.py       publish/subscribe for UI events
 │   └── observability.py   OTel tracer setup
 ├── tools/
-│   ├── db.py              SQLite tool implementations
+│   ├── db.py              Supabase tool implementations
 │   └── mcp_server.py      MCP server + OpenAI tool schemas + dispatcher
 ├── components/            Streamlit tab components
 ├── data/                  asset_questions.json, plant_care.json, checklist
 ├── eval/                  benchmark runner + per-agent scenario files
 ├── knowledge/             RAG indexer, prompt library, maintenance policies
 ├── app.py                 Streamlit entry point
-└── db_init.py             Schema creation + seed data
+├── db_conn.py             Supabase client factory
+└── db_init.py             Seed data (runs automatically on first launch)
 ```

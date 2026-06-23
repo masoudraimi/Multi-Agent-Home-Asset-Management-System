@@ -1,25 +1,17 @@
-import sqlite3
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 
-DB_PATH = Path(__file__).parent.parent / "data" / "home_assets.db"
+from db_conn import get_client
 
 CATEGORIES = ["All", "appliances", "HVAC", "plumbing", "electrical", "exterior", "vehicle", "garden", "plants_trees", "other"]
 
 
 def _load_assets(category: str | None = None) -> pd.DataFrame:
-    conn = sqlite3.connect(DB_PATH)
-    query = "SELECT * FROM assets"
-    params: tuple = ()
+    q = get_client().table("assets").select("*")
     if category and category != "All":
-        query += " WHERE category = ?"
-        params = (category,)
-    query += " ORDER BY category, name"
-    df = pd.read_sql_query(query, conn, params=params)
-    conn.close()
-    return df
+        q = q.eq("category", category)
+    data = q.order("category").order("name").execute().data
+    return pd.DataFrame(data)
 
 
 def render_assets_tab() -> None:
@@ -81,7 +73,5 @@ def _asset_detail_card(row: pd.Series) -> None:
 
 
 def _count_assets() -> int:
-    conn = sqlite3.connect(DB_PATH)
-    count = conn.execute("SELECT COUNT(*) FROM assets").fetchone()[0]
-    conn.close()
-    return count
+    result = get_client().table("assets").select("id", count="exact").execute()
+    return result.count or 0
