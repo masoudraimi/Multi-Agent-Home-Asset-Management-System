@@ -1,29 +1,17 @@
-"""Core CRUD functions for the home asset database.
+"""Core CRUD functions for the home asset database (Supabase backend).
 
 These are plain Python functions — no decorator magic. The MCP server in
 tools/mcp_server.py wraps them with the claude-agent-sdk tool decorator.
 """
 
-import sqlite3
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from typing import Optional
 
-DB_PATH = Path(__file__).parent.parent / "data" / "home_assets.db"
-
-
-def _conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def _row_to_dict(row: sqlite3.Row) -> dict:
-    return dict(row)
+from db_conn import get_client
 
 
 # ---------------------------------------------------------------------------
-# Core CRUD tools (7 original)
+# Core CRUD tools
 # ---------------------------------------------------------------------------
 
 def add_asset(
@@ -59,19 +47,16 @@ def add_asset(
     planting_date: ISO date when plant was planted
     plant_notes: Plant-specific care notes
     """
-    now = datetime.now().isoformat()
-    with _conn() as conn:
-        cur = conn.execute(
-            """INSERT INTO assets
-               (name, category, brand, model, serial, purchase_date, purchase_price,
-                warranty_expiry, location, notes, plant_species, plant_size,
-                planting_date, plant_notes, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (name, category, brand, model, serial, purchase_date, purchase_price,
-             warranty_expiry, location, notes, plant_species, plant_size,
-             planting_date, plant_notes, now),
-        )
-        asset_id = cur.lastrowid
+    row = {
+        "name": name, "category": category, "brand": brand, "model": model,
+        "serial": serial, "purchase_date": purchase_date, "purchase_price": purchase_price,
+        "warranty_expiry": warranty_expiry, "location": location, "notes": notes,
+        "plant_species": plant_species, "plant_size": plant_size,
+        "planting_date": planting_date, "plant_notes": plant_notes,
+        "created_at": datetime.now().isoformat(),
+    }
+    result = get_client().table("assets").insert(row).execute()
+    asset_id = result.data[0]["id"]
     return {"status": "created", "asset_id": asset_id, "name": name}
 
 
@@ -80,14 +65,11 @@ def list_assets(category: Optional[str] = None) -> dict:
 
     category: Optional filter — one of: appliances, HVAC, plumbing, electrical, exterior, vehicle, garden, plants_trees, other
     """
-    with _conn() as conn:
-        if category:
-            rows = conn.execute(
-                "SELECT * FROM assets WHERE category = ? ORDER BY name", (category,)
-            ).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM assets ORDER BY category, name").fetchall()
-    return {"count": len(rows), "assets": [_row_to_dict(r) for r in rows]}
+    q = get_client().table("assets").select("*")
+    if category:
+        q = q.eq("category", category)
+    rows = q.order("category").order("name").execute().data
+    return {"count": len(rows), "assets": rows}
 
 
 def search_assets(query: str) -> dict:
@@ -95,16 +77,11 @@ def search_assets(query: str) -> dict:
 
     query: Search term to match against asset fields
     """
-    pattern = f"%{query}%"
-    with _conn() as conn:
-        rows = conn.execute(
-            """SELECT * FROM assets
-               WHERE name LIKE ? OR brand LIKE ? OR model LIKE ?
-                  OR notes LIKE ? OR plant_species LIKE ?
-               ORDER BY name""",
-            (pattern, pattern, pattern, pattern, pattern),
-        ).fetchall()
-    return {"count": len(rows), "assets": [_row_to_dict(r) for r in rows]}
+    p = f"%{query}%"
+    rows = get_client().table("assets").select("*").or_(
+        f"name.ilike.{p},brand.ilike.{p},model.ilike.{p},notes.ilike.{p},plant_species.ilike.{p}"
+    ).order("name").execute().data
+    return {"count": len(rows), "assets": rows}
 
 
 def log_maintenance(
@@ -126,26 +103,25 @@ def log_maintenance(
     next_due_date: ISO date when this task is next due
     interval_days: Recurring interval in days
     """
-    now = datetime.now().isoformat()
+    client = get_client()
+    asset = client.table("assets").select("name").eq("id", asset_id).execute().data
+    if not asset:
+        return {"status": "error", "message": f"No asset found with id {asset_id}"}
+
     if not completed_date:
         completed_date = date.today().isoformat()
-    with _conn() as conn:
-        asset = conn.execute("SELECT name FROM assets WHERE id = ?", (asset_id,)).fetchone()
-        if not asset:
-            return {"status": "error", "message": f"No asset found with id {asset_id}"}
-        cur = conn.execute(
-            """INSERT INTO maintenance_tasks
-               (asset_id, task_name, completed_date, cost, notes,
-                next_due_date, interval_days, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (asset_id, task_name, completed_date, cost, notes,
-             next_due_date, interval_days, now),
-        )
-        task_id = cur.lastrowid
+
+    row = {
+        "asset_id": asset_id, "task_name": task_name, "completed_date": completed_date,
+        "cost": cost, "notes": notes, "next_due_date": next_due_date,
+        "interval_days": interval_days, "created_at": datetime.now().isoformat(),
+    }
+    result = client.table("maintenance_tasks").insert(row).execute()
+    task_id = result.data[0]["id"]
     return {
         "status": "logged",
         "task_id": task_id,
-        "asset": asset["name"],
+        "asset": asset[0]["name"],
         "task": task_name,
         "completed": completed_date,
         "next_due": next_due_date,
@@ -161,20 +137,21 @@ def get_upcoming_maintenance(days_ahead: int = 30) -> dict:
     cutoff = (today + timedelta(days=days_ahead)).isoformat()
     today_str = today.isoformat()
 
-    with _conn() as conn:
-        rows = conn.execute(
-            """SELECT mt.*, a.name as asset_name
-               FROM maintenance_tasks mt
-               JOIN assets a ON mt.asset_id = a.id
-               WHERE mt.next_due_date IS NOT NULL
-                 AND mt.next_due_date <= ?
-               ORDER BY mt.next_due_date ASC""",
-            (cutoff,),
-        ).fetchall()
+    rows = (
+        get_client()
+        .table("maintenance_tasks")
+        .select("*, assets!inner(name)")
+        .not_.is_("next_due_date", "null")
+        .lte("next_due_date", cutoff)
+        .order("next_due_date")
+        .execute()
+        .data
+    )
 
     tasks = []
     for row in rows:
-        d = _row_to_dict(row)
+        d = {k: v for k, v in row.items() if k != "assets"}
+        d["asset_name"] = row["assets"]["name"]
         due = date.fromisoformat(d["next_due_date"])
         delta = (due - today).days
         d["days_until_due"] = delta
@@ -189,19 +166,23 @@ def get_asset_history(asset_id: int) -> dict:
 
     asset_id: ID of the asset
     """
-    with _conn() as conn:
-        asset = conn.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
-        if not asset:
-            return {"status": "error", "message": f"No asset found with id {asset_id}"}
-        rows = conn.execute(
-            """SELECT * FROM maintenance_tasks WHERE asset_id = ?
-               ORDER BY completed_date DESC, created_at DESC""",
-            (asset_id,),
-        ).fetchall()
-    history = [_row_to_dict(r) for r in rows]
+    client = get_client()
+    asset = client.table("assets").select("*").eq("id", asset_id).execute().data
+    if not asset:
+        return {"status": "error", "message": f"No asset found with id {asset_id}"}
+
+    history = (
+        client.table("maintenance_tasks")
+        .select("*")
+        .eq("asset_id", asset_id)
+        .order("completed_date", desc=True)
+        .order("created_at", desc=True)
+        .execute()
+        .data
+    )
     total_cost = sum(r["cost"] or 0 for r in history)
     return {
-        "asset": _row_to_dict(asset),
+        "asset": asset[0],
         "maintenance_count": len(history),
         "total_cost": round(total_cost, 2),
         "history": history,
@@ -243,30 +224,28 @@ def update_asset(
     planting_date: Date planted YYYY-MM-DD
     plant_notes: Plant-specific notes
     """
-    updates = {
-        k: v for k, v in {
-            "name": name, "category": category, "brand": brand, "model": model,
-            "serial": serial, "purchase_date": purchase_date,
-            "purchase_price": purchase_price, "warranty_expiry": warranty_expiry,
-            "location": location, "notes": notes, "plant_species": plant_species,
-            "plant_size": plant_size, "planting_date": planting_date,
-            "plant_notes": plant_notes,
-        }.items() if v is not None
-    }
+    updates = {k: v for k, v in {
+        "name": name, "category": category, "brand": brand, "model": model,
+        "serial": serial, "purchase_date": purchase_date, "purchase_price": purchase_price,
+        "warranty_expiry": warranty_expiry, "location": location, "notes": notes,
+        "plant_species": plant_species, "plant_size": plant_size,
+        "planting_date": planting_date, "plant_notes": plant_notes,
+    }.items() if v is not None}
+
     if not updates:
         return {"status": "no_change"}
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    values = list(updates.values()) + [asset_id]
-    with _conn() as conn:
-        asset = conn.execute("SELECT name FROM assets WHERE id = ?", (asset_id,)).fetchone()
-        if not asset:
-            return {"status": "error", "message": f"No asset found with id {asset_id}"}
-        conn.execute(f"UPDATE assets SET {set_clause} WHERE id = ?", values)
+
+    client = get_client()
+    asset = client.table("assets").select("name").eq("id", asset_id).execute().data
+    if not asset:
+        return {"status": "error", "message": f"No asset found with id {asset_id}"}
+
+    get_client().table("assets").update(updates).eq("id", asset_id).execute()
     return {"status": "updated", "asset_id": asset_id, "fields_updated": list(updates.keys())}
 
 
 # ---------------------------------------------------------------------------
-# New tools delegating to workflows
+# Tools delegating to workflows
 # ---------------------------------------------------------------------------
 
 def get_onboarding_questions(asset_type: str) -> dict:

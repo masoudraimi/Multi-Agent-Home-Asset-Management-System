@@ -19,11 +19,9 @@ from components.chat_tab import render_chat_tab
 from components.observability_tab import render_observability_tab
 from components.performance_tab import render_performance_tab
 from components.schedule_tab import render_schedule_tab
-from db_init import DB_PATH, init_db
+from db_init import init_db
 
-# Ensure DB exists
-if not DB_PATH.exists():
-    init_db()
+init_db()
 
 # Index knowledge base into semantic memory (no-op if already indexed)
 try:

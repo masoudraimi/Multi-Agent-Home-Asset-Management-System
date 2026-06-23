@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "home_assets.db"
+from db_conn import get_client
+
 PLANT_CARE_PATH = Path(__file__).parent.parent.parent.parent / "data" / "plant_care.json"
 
 _CARE_DATA: dict | None = None
@@ -29,52 +29,49 @@ def _fuzzy_match(species: str, care_data: dict) -> str:
             continue
         if key in s or s in key:
             return key
-        key_words = set(key.split())
-        species_words = set(s.split())
-        if key_words & species_words:
+        if set(key.split()) & set(s.split()):
             return key
     return "default"
 
 
 def get_plant_care_schedule(asset_id: int) -> dict:
     """Generate a care schedule for a plant/tree asset based on its species."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    client = get_client()
 
-    asset = conn.execute("SELECT * FROM assets WHERE id = ?", (asset_id,)).fetchone()
-    if not asset:
-        conn.close()
+    assets = client.table("assets").select("*").eq("id", asset_id).execute().data
+    if not assets:
         return {"error": f"No asset found with id {asset_id}"}
 
-    asset_dict = dict(asset)
-    if asset_dict.get("category") != "plants_trees":
-        conn.close()
+    asset = assets[0]
+    if asset.get("category") != "plants_trees":
         return {
-            "error": f"Asset '{asset_dict['name']}' is not in the plants_trees category",
-            "category": asset_dict.get("category"),
+            "error": f"Asset '{asset['name']}' is not in the plants_trees category",
+            "category": asset.get("category"),
         }
 
-    last_tasks = {}
-    rows = conn.execute(
-        """SELECT task_name, MAX(completed_date) as last_done
-           FROM maintenance_tasks WHERE asset_id = ?
-           GROUP BY task_name""",
-        (asset_id,),
-    ).fetchall()
-    conn.close()
+    task_rows = (
+        client.table("maintenance_tasks")
+        .select("task_name, completed_date")
+        .eq("asset_id", asset_id)
+        .not_.is_("completed_date", "null")
+        .execute()
+        .data
+    )
 
-    for row in rows:
-        if row["last_done"]:
-            last_tasks[row["task_name"].lower()] = row["last_done"]
+    last_tasks: dict[str, str] = {}
+    for row in task_rows:
+        key = row["task_name"].lower()
+        if key not in last_tasks or row["completed_date"] > last_tasks[key]:
+            last_tasks[key] = row["completed_date"]
 
-    species = asset_dict.get("plant_species") or ""
+    species = asset.get("plant_species") or ""
     care_data = _load_care_data()
     matched_key = _fuzzy_match(species, care_data)
     schedule_template = care_data.get(matched_key, care_data["default"])
 
     today = date.today()
-    planting_date = asset_dict.get("planting_date")
-    size = asset_dict.get("plant_size", "unknown")
+    planting_date = asset.get("planting_date")
+    size = asset.get("plant_size", "unknown")
 
     tasks = []
     for task_name, config in schedule_template.items():
@@ -111,10 +108,10 @@ def get_plant_care_schedule(asset_id: int) -> dict:
 
     return {
         "asset_id": asset_id,
-        "asset_name": asset_dict["name"],
+        "asset_name": asset["name"],
         "species": species or "unknown",
         "matched_template": matched_key,
         "size": size,
-        "location": asset_dict.get("location", ""),
+        "location": asset.get("location", ""),
         "care_tasks": tasks,
     }

@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 from datetime import date, timedelta
-from pathlib import Path
 
 import httpx
 
-DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "home_assets.db"
+from db_conn import get_client
 
 
 def build_monthly_digest() -> str:
@@ -20,31 +18,32 @@ def build_monthly_digest() -> str:
     month_cutoff = (today + timedelta(days=30)).isoformat()
     today_str = today.isoformat()
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    all_upcoming = (
+        get_client()
+        .table("maintenance_tasks")
+        .select("task_name, next_due_date, assets!inner(name)")
+        .not_.is_("next_due_date", "null")
+        .lte("next_due_date", month_cutoff)
+        .order("next_due_date")
+        .execute()
+        .data
+    )
 
-    all_upcoming = conn.execute(
-        """SELECT mt.task_name, mt.next_due_date, a.name as asset_name
-           FROM maintenance_tasks mt
-           JOIN assets a ON mt.asset_id = a.id
-           WHERE mt.next_due_date IS NOT NULL
-             AND mt.next_due_date <= ?
-           ORDER BY mt.next_due_date ASC""",
-        (month_cutoff,),
-    ).fetchall()
-    conn.close()
+    flat = [
+        {"task_name": r["task_name"], "next_due_date": r["next_due_date"], "asset_name": r["assets"]["name"]}
+        for r in all_upcoming
+    ]
 
-    overdue = [r for r in all_upcoming if r["next_due_date"] < today_str]
-    due_week = [r for r in all_upcoming if today_str <= r["next_due_date"] <= week_cutoff]
-    due_month = [r for r in all_upcoming if r["next_due_date"] > week_cutoff]
+    overdue = [r for r in flat if r["next_due_date"] < today_str]
+    due_week = [r for r in flat if today_str <= r["next_due_date"] <= week_cutoff]
+    due_month = [r for r in flat if r["next_due_date"] > week_cutoff]
 
     lines = [f"Home Maintenance Digest - {month_name}\n"]
 
     if overdue:
         lines.append(f"Overdue ({len(overdue)})")
         for r in overdue[:10]:
-            due = date.fromisoformat(r["next_due_date"])
-            days_ago = (today - due).days
+            days_ago = (today - date.fromisoformat(r["next_due_date"])).days
             lines.append(f"- {r['asset_name']} - {r['task_name']} ({days_ago}d overdue)")
         if len(overdue) > 10:
             lines.append(f"  ...and {len(overdue) - 10} more")
@@ -55,8 +54,7 @@ def build_monthly_digest() -> str:
     if due_week:
         lines.append(f"Due this week ({len(due_week)})")
         for r in due_week:
-            due = date.fromisoformat(r["next_due_date"])
-            days = (due - today).days
+            days = (date.fromisoformat(r["next_due_date"]) - today).days
             suffix = "today" if days == 0 else f"in {days}d"
             lines.append(f"- {r['asset_name']} - {r['task_name']} ({suffix})")
         lines.append("")

@@ -2,73 +2,74 @@
 
 from __future__ import annotations
 
-import sqlite3
+from collections import defaultdict
 from datetime import date, timedelta
-from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "home_assets.db"
+from db_conn import get_client
 
 
 def get_total_spend_by_category() -> dict:
     """Return total maintenance spend grouped by asset category."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        """SELECT a.category, SUM(COALESCE(mt.cost, 0)) as total_cost, COUNT(mt.id) as task_count
-           FROM assets a
-           LEFT JOIN maintenance_tasks mt ON a.id = mt.asset_id
-           GROUP BY a.category
-           ORDER BY total_cost DESC"""
-    ).fetchall()
-    conn.close()
+    client = get_client()
+    assets = client.table("assets").select("id, category").execute().data
+    tasks = client.table("maintenance_tasks").select("asset_id, cost").execute().data
+
+    asset_category = {a["id"]: a["category"] for a in assets}
+    totals: dict[str, dict] = {a["category"]: {"total_cost": 0.0, "task_count": 0} for a in assets}
+    for task in tasks:
+        cat = asset_category.get(task["asset_id"])
+        if cat and cat in totals:
+            totals[cat]["total_cost"] += task["cost"] or 0
+            totals[cat]["task_count"] += 1
+
     return {
         "by_category": [
-            {"category": r["category"], "total_cost": round(r["total_cost"], 2), "task_count": r["task_count"]}
-            for r in rows
+            {"category": cat, "total_cost": round(data["total_cost"], 2), "task_count": data["task_count"]}
+            for cat, data in sorted(totals.items(), key=lambda x: x[1]["total_cost"], reverse=True)
         ]
     }
 
 
 def get_top_spending_assets(n: int = 5) -> dict:
     """Return the N assets with the highest total maintenance spend."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        """SELECT a.id, a.name, a.category, SUM(COALESCE(mt.cost, 0)) as total_cost, COUNT(mt.id) as task_count
-           FROM assets a
-           LEFT JOIN maintenance_tasks mt ON a.id = mt.asset_id
-           GROUP BY a.id
-           ORDER BY total_cost DESC
-           LIMIT ?""",
-        (n,),
-    ).fetchall()
-    conn.close()
-    return {
-        "top_assets": [
-            {
-                "id": r["id"], "name": r["name"], "category": r["category"],
-                "total_cost": round(r["total_cost"], 2), "task_count": r["task_count"],
-            }
-            for r in rows
-        ]
-    }
+    client = get_client()
+    assets = client.table("assets").select("id, name, category").execute().data
+    tasks = client.table("maintenance_tasks").select("asset_id, cost").execute().data
+
+    spend: dict[int, float] = defaultdict(float)
+    counts: dict[int, int] = defaultdict(int)
+    for task in tasks:
+        spend[task["asset_id"]] += task["cost"] or 0
+        counts[task["asset_id"]] += 1
+
+    enriched = [
+        {
+            "id": a["id"], "name": a["name"], "category": a["category"],
+            "total_cost": round(spend[a["id"]], 2), "task_count": counts[a["id"]],
+        }
+        for a in assets
+    ]
+    enriched.sort(key=lambda x: x["total_cost"], reverse=True)
+    return {"top_assets": enriched[:n]}
 
 
 def get_monthly_spend_trend(months: int = 6) -> dict:
     """Return maintenance spend per month for the last N months."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
     cutoff = (date.today() - timedelta(days=months * 30)).isoformat()
-    rows = conn.execute(
-        """SELECT strftime('%Y-%m', completed_date) as month, SUM(COALESCE(cost, 0)) as total
-           FROM maintenance_tasks
-           WHERE completed_date >= ?
-           GROUP BY month
-           ORDER BY month ASC""",
-        (cutoff,),
-    ).fetchall()
-    conn.close()
-    return {
-        "months": months,
-        "trend": [{"month": r["month"], "spend": round(r["total"], 2)} for r in rows],
-    }
+    tasks = (
+        get_client()
+        .table("maintenance_tasks")
+        .select("completed_date, cost")
+        .gte("completed_date", cutoff)
+        .not_.is_("completed_date", "null")
+        .execute()
+        .data
+    )
+
+    monthly: dict[str, float] = defaultdict(float)
+    for task in tasks:
+        month = task["completed_date"][:7]  # "YYYY-MM"
+        monthly[month] += task["cost"] or 0
+
+    trend = [{"month": m, "spend": round(s, 2)} for m, s in sorted(monthly.items())]
+    return {"months": months, "trend": trend}

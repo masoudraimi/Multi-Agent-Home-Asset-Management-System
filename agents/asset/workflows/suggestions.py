@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "home_assets.db"
+from db_conn import get_client
+
 CHECKLIST_PATH = Path(__file__).parent.parent.parent.parent / "data" / "home_asset_checklist.json"
 
 
@@ -14,11 +14,7 @@ def suggest_missing_assets() -> dict:
     """Compare current assets against a comprehensive home asset checklist and surface gaps."""
     checklist = json.loads(CHECKLIST_PATH.read_text())
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute("SELECT name, category FROM assets").fetchall()
-    conn.close()
-
+    rows = get_client().table("assets").select("name, category").execute().data
     existing_names = {row["name"].lower() for row in rows}
 
     suggestions = []
