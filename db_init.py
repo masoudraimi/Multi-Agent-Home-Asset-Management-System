@@ -7,9 +7,11 @@ from the ADMIN_EMAIL / ADMIN_PASSWORD env vars.
 """
 
 from core.auth import bootstrap_admin
+from core.schema import ensure_schema
 
 
 def init_db() -> None:
+    ensure_schema()
     bootstrap_admin()
     print("Database ready.")
 
