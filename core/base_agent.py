@@ -189,11 +189,17 @@ class BaseAgent:
         span: Any,
     ) -> tuple[str, int, int]:
         """Invoke the claude CLI as a subprocess with an stdio MCP server for tools."""
+        # The stdio MCP server runs in a separate process, so the current-user
+        # ContextVar does not propagate. Pass it through the MCP server env so
+        # tools/stdio_server.py can re-apply it before any DB access.
+        from core.session import USER_ID_ENV_VAR, get_current_user_id
+
         mcp_config = {
             "mcpServers": {
                 "home-assets": {
                     "command": sys.executable,
                     "args": ["-m", "tools.stdio_server"],
+                    "env": {**os.environ, USER_ID_ENV_VAR: get_current_user_id()},
                 }
             }
         }

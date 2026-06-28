@@ -6,6 +6,7 @@ import json
 from datetime import date, timedelta
 from pathlib import Path
 
+from core.session import get_current_user_id
 from db_conn import get_client
 
 PLANT_CARE_PATH = Path(__file__).parent.parent.parent.parent / "data" / "plant_care.json"
@@ -36,9 +37,10 @@ def _fuzzy_match(species: str, care_data: dict) -> str:
 
 def get_plant_care_schedule(asset_id: int) -> dict:
     """Generate a care schedule for a plant/tree asset based on its species."""
+    uid = get_current_user_id()
     client = get_client()
 
-    assets = client.table("assets").select("*").eq("id", asset_id).execute().data
+    assets = client.table("assets").select("*").eq("id", asset_id).eq("user_id", uid).execute().data
     if not assets:
         return {"error": f"No asset found with id {asset_id}"}
 
@@ -53,6 +55,7 @@ def get_plant_care_schedule(asset_id: int) -> dict:
         client.table("maintenance_tasks")
         .select("task_name, completed_date")
         .eq("asset_id", asset_id)
+        .eq("user_id", uid)
         .not_.is_("completed_date", "null")
         .execute()
         .data

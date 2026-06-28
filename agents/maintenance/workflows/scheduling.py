@@ -7,6 +7,7 @@ from pathlib import Path
 
 import yaml
 
+from core.session import get_current_user_id
 from db_conn import get_client
 
 POLICIES_PATH = Path(__file__).parent.parent.parent.parent / "knowledge" / "policies" / "maintenance_policies.yaml"
@@ -51,11 +52,13 @@ def get_policy_schedule(asset_category: str, asset_model: str | None = None) -> 
 def suggest_overdue_assets(days_overdue: int = 0) -> dict:
     """Return assets with tasks that are overdue or have never been serviced."""
     today = date.today().isoformat()
+    uid = get_current_user_id()
     client = get_client()
 
     overdue_rows = (
         client.table("maintenance_tasks")
         .select("*, assets!inner(name, category)")
+        .eq("user_id", uid)
         .not_.is_("next_due_date", "null")
         .lt("next_due_date", today)
         .order("next_due_date")
@@ -69,10 +72,10 @@ def suggest_overdue_assets(days_overdue: int = 0) -> dict:
         d["category"] = row["assets"]["category"]
         overdue.append(d)
 
-    all_assets = client.table("assets").select("id, name, category, created_at").execute().data
+    all_assets = client.table("assets").select("id, name, category, created_at").eq("user_id", uid).execute().data
     serviced_ids = {
         row["asset_id"]
-        for row in client.table("maintenance_tasks").select("asset_id").execute().data
+        for row in client.table("maintenance_tasks").select("asset_id").eq("user_id", uid).execute().data
     }
     never_serviced = [a for a in all_assets if a["id"] not in serviced_ids]
 

@@ -158,15 +158,28 @@ Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. T
 In your Supabase project, open the **SQL Editor** and run:
 
 ```sql
+-- Users (multi-user auth). Passwords are bcrypt-hashed by the app.
+CREATE TABLE IF NOT EXISTS users (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email         TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+    is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- agent_memory is scoped per user; uniqueness is (user_id, agent_name, key).
 CREATE TABLE IF NOT EXISTS agent_memory (
     id          SERIAL PRIMARY KEY,
+    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
     agent_name  TEXT NOT NULL,
     key         TEXT NOT NULL,
     value       TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
-    UNIQUE (agent_name, key)
+    UNIQUE (user_id, agent_name, key)
 );
 
+-- semantic_memory is shared/global knowledge (plant care, maintenance policies).
 CREATE TABLE IF NOT EXISTS semantic_memory (
     id          SERIAL PRIMARY KEY,
     agent_name  TEXT NOT NULL,
@@ -178,6 +191,7 @@ CREATE TABLE IF NOT EXISTS semantic_memory (
 
 CREATE TABLE IF NOT EXISTS assets (
     id              SERIAL PRIMARY KEY,
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name            TEXT NOT NULL,
     category        TEXT NOT NULL,
     brand           TEXT,
@@ -194,10 +208,12 @@ CREATE TABLE IF NOT EXISTS assets (
     plant_notes     TEXT,
     created_at      TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS assets_user_id_idx ON assets(user_id);
 
 CREATE TABLE IF NOT EXISTS maintenance_tasks (
     id              SERIAL PRIMARY KEY,
-    asset_id        INTEGER NOT NULL REFERENCES assets(id),
+    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    asset_id        INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
     task_name       TEXT NOT NULL,
     scheduled_date  TEXT,
     completed_date  TEXT,
@@ -207,7 +223,20 @@ CREATE TABLE IF NOT EXISTS maintenance_tasks (
     interval_days   INTEGER,
     created_at      TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS maintenance_tasks_user_id_idx ON maintenance_tasks(user_id);
 ```
+
+> **Multi-user:** Data is isolated per user at the application layer (every query
+> filters by the signed-in user's id). Accounts are created only by an admin via
+> the in-app **Admin** tab — there is no public sign-up. On first run the app
+> bootstraps an admin account from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (see below).
+>
+> **Migrating an existing single-tenant DB?** Run, in order:
+> `TRUNCATE maintenance_tasks, assets RESTART IDENTITY CASCADE;` then the
+> `CREATE TABLE users` above, then
+> `ALTER TABLE assets ADD COLUMN user_id UUID REFERENCES users(id) ON DELETE CASCADE;`
+> (and the same for `maintenance_tasks` and `agent_memory`), then recreate the
+> `agent_memory` unique constraint as `(user_id, agent_name, key)`.
 
 ### 2. Configure environment variables
 
@@ -225,6 +254,10 @@ cp .env.example .env   # then fill in your values
 # Supabase (required) — use the service_role key for backend access
 SUPABASE_URL=https://<your-project-ref>.supabase.co
 SUPABASE_KEY=<your-service-role-key>
+
+# First-admin bootstrap (created automatically on first run if no users exist)
+ADMIN_EMAIL=you@example.com
+ADMIN_PASSWORD=<choose-a-strong-password>
 
 # LLM provider (default: claude_cli — no API key needed if claude CLI is authenticated)
 # LLM_PROVIDER=claude_cli

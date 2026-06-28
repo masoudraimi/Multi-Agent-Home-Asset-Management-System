@@ -5,14 +5,16 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date, timedelta
 
+from core.session import get_current_user_id
 from db_conn import get_client
 
 
 def get_total_spend_by_category() -> dict:
     """Return total maintenance spend grouped by asset category."""
+    uid = get_current_user_id()
     client = get_client()
-    assets = client.table("assets").select("id, category").execute().data
-    tasks = client.table("maintenance_tasks").select("asset_id, cost").execute().data
+    assets = client.table("assets").select("id, category").eq("user_id", uid).execute().data
+    tasks = client.table("maintenance_tasks").select("asset_id, cost").eq("user_id", uid).execute().data
 
     asset_category = {a["id"]: a["category"] for a in assets}
     totals: dict[str, dict] = {a["category"]: {"total_cost": 0.0, "task_count": 0} for a in assets}
@@ -32,9 +34,10 @@ def get_total_spend_by_category() -> dict:
 
 def get_top_spending_assets(n: int = 5) -> dict:
     """Return the N assets with the highest total maintenance spend."""
+    uid = get_current_user_id()
     client = get_client()
-    assets = client.table("assets").select("id, name, category").execute().data
-    tasks = client.table("maintenance_tasks").select("asset_id, cost").execute().data
+    assets = client.table("assets").select("id, name, category").eq("user_id", uid).execute().data
+    tasks = client.table("maintenance_tasks").select("asset_id, cost").eq("user_id", uid).execute().data
 
     spend: dict[int, float] = defaultdict(float)
     counts: dict[int, int] = defaultdict(int)
@@ -60,6 +63,7 @@ def get_monthly_spend_trend(months: int = 6) -> dict:
         get_client()
         .table("maintenance_tasks")
         .select("completed_date, cost")
+        .eq("user_id", get_current_user_id())
         .gte("completed_date", cutoff)
         .not_.is_("completed_date", "null")
         .execute()

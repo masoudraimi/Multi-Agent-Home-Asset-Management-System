@@ -1,13 +1,14 @@
 import pandas as pd
 import streamlit as st
 
+from core.session import get_current_user_id
 from db_conn import get_client
 
 CATEGORIES = ["All", "appliances", "HVAC", "plumbing", "electrical", "exterior", "vehicle", "garden", "plants_trees", "other"]
 
 
 def _load_assets(category: str | None = None) -> pd.DataFrame:
-    q = get_client().table("assets").select("*")
+    q = get_client().table("assets").select("*").eq("user_id", get_current_user_id())
     if category and category != "All":
         q = q.eq("category", category)
     data = q.order("category").order("name").execute().data
@@ -73,5 +74,7 @@ def _asset_detail_card(row: pd.Series) -> None:
 
 
 def _count_assets() -> int:
-    result = get_client().table("assets").select("id", count="exact").execute()
+    result = get_client().table("assets").select("id", count="exact").eq(
+        "user_id", get_current_user_id()
+    ).execute()
     return result.count or 0

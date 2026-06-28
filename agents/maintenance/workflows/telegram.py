@@ -7,6 +7,7 @@ from datetime import date, timedelta
 
 import httpx
 
+from core.session import get_current_user_id
 from db_conn import get_client
 
 
@@ -22,6 +23,7 @@ def build_monthly_digest() -> str:
         get_client()
         .table("maintenance_tasks")
         .select("task_name, next_due_date, assets!inner(name)")
+        .eq("user_id", get_current_user_id())
         .not_.is_("next_due_date", "null")
         .lte("next_due_date", month_cutoff)
         .order("next_due_date")
