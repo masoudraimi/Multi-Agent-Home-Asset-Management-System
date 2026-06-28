@@ -155,7 +155,10 @@ Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. T
 
 ### 1. Create the database schema
 
-In your Supabase project, open the **SQL Editor** and run:
+**Automatic (recommended):** set `SUPABASE_DB_URL` (or `SUPABASE_DB_PASSWORD`) in
+`.env` — see step 2 — and the app creates the schema for you on first launch.
+
+**Manual:** otherwise, open the Supabase **SQL Editor** and run:
 
 ```sql
 -- Users (multi-user auth). Passwords are bcrypt-hashed by the app.
@@ -254,6 +257,13 @@ cp .env.example .env   # then fill in your values
 # Supabase (required) — use the service_role key for backend access
 SUPABASE_URL=https://<your-project-ref>.supabase.co
 SUPABASE_KEY=<your-service-role-key>
+
+# Auto-schema creation (optional but recommended). The app creates the
+# multi-user schema on startup over a direct Postgres connection. Provide ONE:
+#   SUPABASE_DB_URL=postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres
+#   (Project Settings -> Database -> Connection string), or just:
+# SUPABASE_DB_PASSWORD=<your-database-password>
+# If neither is set, run the schema SQL manually in the Supabase SQL editor.
 
 # First-admin bootstrap (created automatically on first run if no users exist)
 ADMIN_EMAIL=you@example.com
