@@ -7,6 +7,7 @@ tools/mcp_server.py wraps them with the claude-agent-sdk tool decorator.
 from datetime import date, datetime, timedelta
 from typing import Optional
 
+from core.session import get_current_user_id
 from db_conn import get_client
 
 
@@ -53,6 +54,7 @@ def add_asset(
         "warranty_expiry": warranty_expiry, "location": location, "notes": notes,
         "plant_species": plant_species, "plant_size": plant_size,
         "planting_date": planting_date, "plant_notes": plant_notes,
+        "user_id": get_current_user_id(),
         "created_at": datetime.now().isoformat(),
     }
     result = get_client().table("assets").insert(row).execute()
@@ -65,7 +67,7 @@ def list_assets(category: Optional[str] = None) -> dict:
 
     category: Optional filter — one of: appliances, HVAC, plumbing, electrical, exterior, vehicle, garden, plants_trees, other
     """
-    q = get_client().table("assets").select("*")
+    q = get_client().table("assets").select("*").eq("user_id", get_current_user_id())
     if category:
         q = q.eq("category", category)
     rows = q.order("category").order("name").execute().data
@@ -78,7 +80,9 @@ def search_assets(query: str) -> dict:
     query: Search term to match against asset fields
     """
     p = f"%{query}%"
-    rows = get_client().table("assets").select("*").or_(
+    rows = get_client().table("assets").select("*").eq(
+        "user_id", get_current_user_id()
+    ).or_(
         f"name.ilike.{p},brand.ilike.{p},model.ilike.{p},notes.ilike.{p},plant_species.ilike.{p}"
     ).order("name").execute().data
     return {"count": len(rows), "assets": rows}
@@ -103,8 +107,12 @@ def log_maintenance(
     next_due_date: ISO date when this task is next due
     interval_days: Recurring interval in days
     """
+    user_id = get_current_user_id()
     client = get_client()
-    asset = client.table("assets").select("name").eq("id", asset_id).execute().data
+    asset = (
+        client.table("assets").select("name")
+        .eq("id", asset_id).eq("user_id", user_id).execute().data
+    )
     if not asset:
         return {"status": "error", "message": f"No asset found with id {asset_id}"}
 
@@ -114,7 +122,8 @@ def log_maintenance(
     row = {
         "asset_id": asset_id, "task_name": task_name, "completed_date": completed_date,
         "cost": cost, "notes": notes, "next_due_date": next_due_date,
-        "interval_days": interval_days, "created_at": datetime.now().isoformat(),
+        "interval_days": interval_days, "user_id": user_id,
+        "created_at": datetime.now().isoformat(),
     }
     result = client.table("maintenance_tasks").insert(row).execute()
     task_id = result.data[0]["id"]
@@ -141,6 +150,7 @@ def get_upcoming_maintenance(days_ahead: int = 30) -> dict:
         get_client()
         .table("maintenance_tasks")
         .select("*, assets!inner(name)")
+        .eq("user_id", get_current_user_id())
         .not_.is_("next_due_date", "null")
         .lte("next_due_date", cutoff)
         .order("next_due_date")
@@ -166,8 +176,12 @@ def get_asset_history(asset_id: int) -> dict:
 
     asset_id: ID of the asset
     """
+    user_id = get_current_user_id()
     client = get_client()
-    asset = client.table("assets").select("*").eq("id", asset_id).execute().data
+    asset = (
+        client.table("assets").select("*")
+        .eq("id", asset_id).eq("user_id", user_id).execute().data
+    )
     if not asset:
         return {"status": "error", "message": f"No asset found with id {asset_id}"}
 
@@ -175,6 +189,7 @@ def get_asset_history(asset_id: int) -> dict:
         client.table("maintenance_tasks")
         .select("*")
         .eq("asset_id", asset_id)
+        .eq("user_id", user_id)
         .order("completed_date", desc=True)
         .order("created_at", desc=True)
         .execute()
@@ -235,12 +250,16 @@ def update_asset(
     if not updates:
         return {"status": "no_change"}
 
+    user_id = get_current_user_id()
     client = get_client()
-    asset = client.table("assets").select("name").eq("id", asset_id).execute().data
+    asset = (
+        client.table("assets").select("name")
+        .eq("id", asset_id).eq("user_id", user_id).execute().data
+    )
     if not asset:
         return {"status": "error", "message": f"No asset found with id {asset_id}"}
 
-    get_client().table("assets").update(updates).eq("id", asset_id).execute()
+    client.table("assets").update(updates).eq("id", asset_id).eq("user_id", user_id).execute()
     return {"status": "updated", "asset_id": asset_id, "fields_updated": list(updates.keys())}
 
 

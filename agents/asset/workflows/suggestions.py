@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from core.session import get_current_user_id
 from db_conn import get_client
 
 CHECKLIST_PATH = Path(__file__).parent.parent.parent.parent / "data" / "home_asset_checklist.json"
@@ -14,7 +15,9 @@ def suggest_missing_assets() -> dict:
     """Compare current assets against a comprehensive home asset checklist and surface gaps."""
     checklist = json.loads(CHECKLIST_PATH.read_text())
 
-    rows = get_client().table("assets").select("name, category").execute().data
+    rows = get_client().table("assets").select("name, category").eq(
+        "user_id", get_current_user_id()
+    ).execute().data
     existing_names = {row["name"].lower() for row in rows}
 
     suggestions = []

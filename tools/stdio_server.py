@@ -15,6 +15,12 @@ import os
 
 os.environ.setdefault("LLM_PROVIDER", "claude_sdk")
 
+# Re-apply the authenticated user id passed by the parent process (the ContextVar
+# does not cross the process boundary). Every tool dispatched here is then scoped.
+from core.session import USER_ID_ENV_VAR, set_current_user
+
+set_current_user(os.environ.get(USER_ID_ENV_VAR))
+
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp import types

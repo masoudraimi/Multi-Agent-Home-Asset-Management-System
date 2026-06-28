@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+from core.session import get_current_user_id
 from db_conn import get_client
 
 
@@ -17,6 +18,7 @@ def get_expiring_warranties(days_ahead: int = 90) -> dict:
         get_client()
         .table("assets")
         .select("id, name, category, warranty_expiry, purchase_price")
+        .eq("user_id", get_current_user_id())
         .order("warranty_expiry")
         .execute()
         .data

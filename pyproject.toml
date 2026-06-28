@@ -5,6 +5,7 @@ description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
     "anthropic>=0.109.1",
+    "bcrypt>=4.1.0",
     "claude-agent-sdk>=0.2.96",
     "openai>=1.0.0",
     "httpx>=0.28.1",

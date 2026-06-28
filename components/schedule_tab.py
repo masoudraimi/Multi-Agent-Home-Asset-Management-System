@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
+from core.session import get_current_user_id
 from db_conn import get_client
 
 _URGENCY_LABEL = {
@@ -22,6 +23,7 @@ def _load_upcoming(days: int) -> pd.DataFrame:
         get_client()
         .table("maintenance_tasks")
         .select("id, task_name, next_due_date, completed_date, interval_days, assets!inner(name, category)")
+        .eq("user_id", get_current_user_id())
         .not_.is_("next_due_date", "null")
         .lte("next_due_date", cutoff)
         .order("next_due_date")
