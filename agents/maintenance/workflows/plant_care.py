@@ -2,23 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from datetime import date, timedelta
-from pathlib import Path
 
 from core.session import get_current_user_id
 from db import get_provider
-
-PLANT_CARE_PATH = Path(__file__).parent.parent.parent.parent / "data" / "plant_care.json"
-
-_CARE_DATA: dict | None = None
+from schema import get_plant_care
 
 
 def _load_care_data() -> dict:
-    global _CARE_DATA
-    if _CARE_DATA is None:
-        _CARE_DATA = json.loads(PLANT_CARE_PATH.read_text())
-    return _CARE_DATA
+    return get_plant_care()
 
 
 def _fuzzy_match(species: str, care_data: dict) -> str:

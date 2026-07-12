@@ -1,0 +1,12 @@
+from schema.models import CategorySchema
+
+OTHER = CategorySchema(
+    category="other",
+    onboarding_questions=[
+        "What is it?",
+        "What brand or model?",
+        "When did you get it?",
+        "Any warranty information?",
+        "Where is it located or stored?",
+    ],
+)

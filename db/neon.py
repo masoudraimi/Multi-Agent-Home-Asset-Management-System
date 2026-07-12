@@ -77,6 +77,14 @@ ALTER TABLE assets            ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES u
 ALTER TABLE maintenance_tasks ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE;
 ALTER TABLE agent_memory      ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE;
 
+-- Vehicle-specific typed columns
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS rego_plate      TEXT;
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS odometer_km     INTEGER;
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS next_service_km INTEGER;
+
+-- Plant indoor/outdoor flag
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS is_indoor BOOLEAN;
+
 CREATE INDEX IF NOT EXISTS assets_user_id_idx ON assets(user_id);
 CREATE INDEX IF NOT EXISTS maintenance_tasks_user_id_idx ON maintenance_tasks(user_id);
 
@@ -128,6 +136,10 @@ class NeonProvider:
         plant_size: str | None = None,
         planting_date: str | None = None,
         plant_notes: str | None = None,
+        is_indoor: bool | None = None,
+        rego_plate: str | None = None,
+        odometer_km: int | None = None,
+        next_service_km: int | None = None,
         user_id: str | None = None,
     ) -> dict:
         with self._conn().cursor() as cur:
@@ -137,15 +149,19 @@ class NeonProvider:
                     name, category, brand, model, serial,
                     purchase_date, purchase_price, warranty_expiry,
                     location, notes, plant_species, plant_size,
-                    planting_date, plant_notes, user_id, created_at
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    planting_date, plant_notes, is_indoor,
+                    rego_plate, odometer_km, next_service_km,
+                    user_id, created_at
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 RETURNING id
                 """,
                 [
                     name, category, brand, model, serial,
                     purchase_date, purchase_price, warranty_expiry,
                     location, notes, plant_species, plant_size,
-                    planting_date, plant_notes, user_id, datetime.now().isoformat(),
+                    planting_date, plant_notes, is_indoor,
+                    rego_plate, odometer_km, next_service_km,
+                    user_id, datetime.now().isoformat(),
                 ],
             )
             asset_id = cur.fetchone()["id"]
@@ -285,6 +301,30 @@ class NeonProvider:
             "total_cost": round(total_cost, 2),
             "history": history,
         }
+
+    def get_expiring_warranties(self, user_id: str, days_ahead: int = 90) -> dict:
+        today = date.today()
+        cutoff = (today + timedelta(days=days_ahead)).isoformat()
+        today_str = today.isoformat()
+        with self._conn().cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, name, category, brand, model, warranty_expiry
+                FROM assets
+                WHERE user_id=%s
+                  AND warranty_expiry IS NOT NULL
+                  AND warranty_expiry >= %s
+                  AND warranty_expiry <= %s
+                ORDER BY warranty_expiry
+                """,
+                [user_id, today_str, cutoff],
+            )
+            rows = [dict(r) for r in cur.fetchall()]
+        for row in rows:
+            delta = (date.fromisoformat(row["warranty_expiry"]) - today).days
+            row["days_until_expiry"] = delta
+            row["urgency"] = "due_soon" if delta <= 30 else "upcoming"
+        return {"count": len(rows), "days_ahead": days_ahead, "warranties": rows}
 
     def update_asset(self, user_id: str, asset_id: int, updates: dict) -> dict:
         if not updates:

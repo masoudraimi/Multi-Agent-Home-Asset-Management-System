@@ -1,17 +1,13 @@
-"""Index data/ JSON files into semantic memory for RAG retrieval.
+"""Index schema data into semantic memory for RAG retrieval.
 
-Run once at startup (or when data files change) to populate semantic memory.
+Run once at startup (or when schema files change) to populate semantic memory.
 """
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from core.memory.semantic import SemanticMemory
 from db import get_provider
-
-DATA_ROOT = Path(__file__).parent.parent.parent / "data"
+from schema import get_checklist, get_plant_care
 
 
 def is_indexed(agent_name: str) -> bool:
@@ -20,12 +16,9 @@ def is_indexed(agent_name: str) -> bool:
 
 
 def index_plant_care() -> int:
-    """Index plant_care.json into maintenance agent's semantic memory."""
+    """Index plant species care schedules into maintenance agent's semantic memory."""
     mem = SemanticMemory("maintenance")
-    plant_care_path = DATA_ROOT / "plant_care.json"
-    if not plant_care_path.exists():
-        return 0
-    plant_care = json.loads(plant_care_path.read_text())
+    plant_care = get_plant_care()
     count = 0
     for species, tasks in plant_care.items():
         if species == "default":
@@ -41,12 +34,9 @@ def index_plant_care() -> int:
 
 
 def index_checklist() -> int:
-    """Index home_asset_checklist.json into asset agent's semantic memory."""
+    """Index asset checklist into asset agent's semantic memory."""
     mem = SemanticMemory("asset")
-    checklist_path = DATA_ROOT / "home_asset_checklist.json"
-    if not checklist_path.exists():
-        return 0
-    checklist = json.loads(checklist_path.read_text())
+    checklist = get_checklist()
     count = 0
     for category, items in checklist.items():
         for item in items:

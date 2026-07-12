@@ -77,6 +77,14 @@ ALTER TABLE assets            ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES u
 ALTER TABLE maintenance_tasks ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE;
 ALTER TABLE agent_memory      ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE;
 
+-- Vehicle-specific typed columns
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS rego_plate      TEXT;
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS odometer_km     INTEGER;
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS next_service_km INTEGER;
+
+-- Plant indoor/outdoor flag
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS is_indoor BOOLEAN;
+
 CREATE INDEX IF NOT EXISTS assets_user_id_idx ON assets(user_id);
 CREATE INDEX IF NOT EXISTS maintenance_tasks_user_id_idx ON maintenance_tasks(user_id);
 
@@ -174,6 +182,10 @@ class SupabaseProvider:
         plant_size: str | None = None,
         planting_date: str | None = None,
         plant_notes: str | None = None,
+        is_indoor: bool | None = None,
+        rego_plate: str | None = None,
+        odometer_km: int | None = None,
+        next_service_km: int | None = None,
         user_id: str | None = None,
     ) -> dict:
         row = {
@@ -182,7 +194,9 @@ class SupabaseProvider:
             "purchase_price": purchase_price, "warranty_expiry": warranty_expiry,
             "location": location, "notes": notes, "plant_species": plant_species,
             "plant_size": plant_size, "planting_date": planting_date,
-            "plant_notes": plant_notes, "user_id": user_id,
+            "plant_notes": plant_notes, "is_indoor": is_indoor,
+            "rego_plate": rego_plate, "odometer_km": odometer_km,
+            "next_service_km": next_service_km, "user_id": user_id,
             "created_at": datetime.now().isoformat(),
         }
         result = self._get_client().table("assets").insert(row).execute()
@@ -305,6 +319,26 @@ class SupabaseProvider:
             return {"status": "error", "message": f"No asset found with id {asset_id}"}
         client.table("assets").update(updates).eq("id", asset_id).eq("user_id", user_id).execute()
         return {"status": "updated", "asset_id": asset_id, "fields_updated": list(updates.keys())}
+
+    def get_expiring_warranties(self, user_id: str, days_ahead: int = 90) -> dict:
+        today = date.today()
+        cutoff = (today + timedelta(days=days_ahead)).isoformat()
+        today_str = today.isoformat()
+        rows = (
+            self._get_client().table("assets")
+            .select("id, name, category, brand, model, warranty_expiry")
+            .eq("user_id", user_id)
+            .gte("warranty_expiry", today_str)
+            .lte("warranty_expiry", cutoff)
+            .order("warranty_expiry")
+            .execute()
+            .data
+        )
+        for row in rows:
+            delta = (date.fromisoformat(row["warranty_expiry"]) - today).days
+            row["days_until_expiry"] = delta
+            row["urgency"] = "due_soon" if delta <= 30 else "upcoming"
+        return {"count": len(rows), "days_ahead": days_ahead, "warranties": rows}
 
     # -- Auth / Users --
 

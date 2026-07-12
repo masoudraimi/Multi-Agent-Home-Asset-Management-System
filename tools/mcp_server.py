@@ -33,6 +33,10 @@ class AddAssetInput(BaseModel):
     plant_size: Optional[str] = None
     planting_date: Optional[str] = None
     plant_notes: Optional[str] = None
+    is_indoor: Optional[bool] = None
+    rego_plate: Optional[str] = None
+    odometer_km: Optional[int] = None
+    next_service_km: Optional[int] = None
 
 
 class ListAssetsInput(BaseModel):
@@ -77,6 +81,10 @@ class UpdateAssetInput(BaseModel):
     plant_size: Optional[str] = None
     planting_date: Optional[str] = None
     plant_notes: Optional[str] = None
+    is_indoor: Optional[bool] = None
+    rego_plate: Optional[str] = None
+    odometer_km: Optional[int] = None
+    next_service_km: Optional[int] = None
 
 
 class GetOnboardingQuestionsInput(BaseModel):
@@ -93,6 +101,10 @@ class GetPlantCareScheduleInput(BaseModel):
 
 class SuggestMissingAssetsInput(BaseModel):
     pass
+
+
+class GetExpiringWarrantiesInput(BaseModel):
+    days_ahead: int = 90
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +216,16 @@ async def _suggest_missing_assets(params: SuggestMissingAssetsInput) -> dict:
     return db.suggest_missing_assets()
 
 
+@tool(
+    name="get_expiring_warranties",
+    description="Find assets whose warranty expires within the next N days. "
+                "Use this to proactively alert the user before warranties lapse.",
+    input_schema=GetExpiringWarrantiesInput,
+)
+async def _get_expiring_warranties(params: GetExpiringWarrantiesInput) -> dict:
+    return db.get_expiring_warranties(days_ahead=params.days_ahead)
+
+
 # ---------------------------------------------------------------------------
 # OpenRouter: tool schemas and direct dispatch (bypasses MCP)
 # ---------------------------------------------------------------------------
@@ -248,6 +270,10 @@ _OPENROUTER_TOOL_DEFS: list[tuple[str, str, type[BaseModel]]] = [
      "Suggest commonly-missed home assets by comparing the database to a "
      "comprehensive checklist. Returns gaps grouped by priority.",
      SuggestMissingAssetsInput),
+    ("get_expiring_warranties",
+     "Find assets whose warranty expires within the next N days. "
+     "Use this to proactively alert the user before warranties lapse.",
+     GetExpiringWarrantiesInput),
 ]
 
 
@@ -293,6 +319,8 @@ def dispatch_tool(name: str, args: dict) -> dict:
             return db.get_plant_care_schedule(asset_id=params.asset_id)
         case "suggest_missing_assets":
             return db.suggest_missing_assets()
+        case "get_expiring_warranties":
+            return db.get_expiring_warranties(days_ahead=params.days_ahead)
         case _:
             raise ValueError(f"Unknown tool: {name}")
 
@@ -315,5 +343,6 @@ def build_sdk_server():
         _review_asset_draft,
         _get_plant_care_schedule,
         _suggest_missing_assets,
+        _get_expiring_warranties,
     ]
     return create_sdk_mcp_server("home-assets", tools=tools)
