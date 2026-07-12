@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from core.session import get_current_user_id
-from db_conn import get_client
+from db import get_provider
 
 
 def get_expiring_warranties(days_ahead: int = 90) -> dict:
@@ -14,19 +14,12 @@ def get_expiring_warranties(days_ahead: int = 90) -> dict:
     cutoff = (today + timedelta(days=days_ahead)).isoformat()
     today_str = today.isoformat()
 
-    all_assets = (
-        get_client()
-        .table("assets")
-        .select("id, name, category, warranty_expiry, purchase_price")
-        .eq("user_id", get_current_user_id())
-        .order("warranty_expiry")
-        .execute()
-        .data
-    )
+    all_assets = get_provider().list_assets(get_current_user_id())["assets"]
+    all_assets.sort(key=lambda a: a.get("warranty_expiry") or "")
 
     expired, expiring_soon, valid, unknown = [], [], [], []
     for asset in all_assets:
-        expiry = asset["warranty_expiry"]
+        expiry = asset.get("warranty_expiry")
         if not expiry:
             unknown.append(asset)
         elif expiry < today_str:

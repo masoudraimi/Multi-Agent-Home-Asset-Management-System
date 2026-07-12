@@ -9,6 +9,7 @@ from core.models import simple_complete
 
 from core.event_bus import EventBus
 from core.events import HumanApprovalRequested
+from core.observability import audit_log
 
 QUESTIONS_PATH = Path(__file__).parent.parent.parent.parent / "data" / "asset_questions.json"
 
@@ -87,11 +88,18 @@ Only flag genuinely important missing fields, not optional ones."""
         }
 
     if result.get("ready_to_save"):
+        request_id = draft.get("name", "asset")[:8]
         EventBus().publish(HumanApprovalRequested(
-            request_id=draft.get("name", "asset")[:8],
+            request_id=request_id,
             agent_name="asset",
             action_description=f"Save asset: {draft.get('name', 'unnamed')} ({asset_type})",
             payload=draft,
         ))
+        audit_log("approval_requested", {
+            "request_id": request_id,
+            "agent_name": "asset",
+            "asset_name": draft.get("name", "unnamed"),
+            "category": asset_type,
+        })
 
     return result

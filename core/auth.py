@@ -1,25 +1,16 @@
-"""Self-managed authentication against the `users` table.
+"""Self-managed authentication — delegates all DB operations to the active provider.
 
-Passwords are hashed with bcrypt. There is no public sign-up — accounts are
-created only by an admin (or the env-bootstrapped first admin). All operations
-use the service-role Supabase client.
+Business-level validation (email format, password length, last-admin guard) lives
+here. DB operations are provider-agnostic via db.get_provider().
 """
-
 from __future__ import annotations
 
 import os
 
 import bcrypt
 
-from db_conn import get_client
+from db import get_provider
 
-# Columns safe to expose to the UI / session (never includes password_hash).
-_PUBLIC_COLS = "id, email, role, is_active, created_at"
-
-
-# ---------------------------------------------------------------------------
-# Password hashing
-# ---------------------------------------------------------------------------
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -41,23 +32,7 @@ def authenticate(email: str, password: str) -> dict | None:
     email = (email or "").strip().lower()
     if not email or not password:
         return None
-    rows = (
-        get_client()
-        .table("users")
-        .select("id, email, role, is_active, created_at, password_hash")
-        .eq("email", email)
-        .execute()
-        .data
-    )
-    if not rows:
-        return None
-    user = rows[0]
-    if not user.get("is_active"):
-        return None
-    if not verify_password(password, user["password_hash"]):
-        return None
-    user.pop("password_hash", None)
-    return user
+    return get_provider().authenticate(email, password)
 
 
 # ---------------------------------------------------------------------------
@@ -65,25 +40,15 @@ def authenticate(email: str, password: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 def list_users() -> list[dict]:
-    return (
-        get_client()
-        .table("users")
-        .select(_PUBLIC_COLS)
-        .order("created_at")
-        .execute()
-        .data
-    )
+    return get_provider().list_users()
 
 
 def get_user(user_id: str) -> dict | None:
-    rows = get_client().table("users").select(_PUBLIC_COLS).eq("id", user_id).execute().data
-    return rows[0] if rows else None
+    return get_provider().get_user(user_id)
 
 
 def email_exists(email: str) -> bool:
-    email = (email or "").strip().lower()
-    rows = get_client().table("users").select("id").eq("email", email).execute().data
-    return bool(rows)
+    return get_provider().email_exists((email or "").strip().lower())
 
 
 def create_user(email: str, password: str, role: str = "user") -> dict:
@@ -97,58 +62,34 @@ def create_user(email: str, password: str, role: str = "user") -> dict:
         raise ValueError("Role must be 'admin' or 'user'.")
     if email_exists(email):
         raise ValueError(f"A user with email '{email}' already exists.")
-
-    row = {
-        "email": email,
-        "password_hash": hash_password(password),
-        "role": role,
-    }
-    inserted = get_client().table("users").insert(row).execute().data[0]
-    return {k: inserted[k] for k in ("id", "email", "role", "is_active", "created_at")}
+    return get_provider().create_user(email, password, role)
 
 
 def set_active(user_id: str, is_active: bool) -> None:
-    if not is_active and _is_last_active_admin(user_id):
+    if not is_active and get_provider().is_last_active_admin(user_id):
         raise ValueError("Cannot deactivate the last active admin.")
-    get_client().table("users").update({"is_active": is_active}).eq("id", user_id).execute()
+    get_provider().set_active(user_id, is_active)
 
 
 def set_role(user_id: str, role: str) -> None:
     if role not in ("admin", "user"):
         raise ValueError("Role must be 'admin' or 'user'.")
-    if role != "admin" and _is_last_active_admin(user_id):
+    if role != "admin" and get_provider().is_last_active_admin(user_id):
         raise ValueError("Cannot demote the last active admin.")
-    get_client().table("users").update({"role": role}).eq("id", user_id).execute()
+    get_provider().set_role(user_id, role)
 
 
 def reset_password(user_id: str, new_password: str) -> None:
     if not new_password or len(new_password) < 8:
         raise ValueError("Password must be at least 8 characters.")
-    get_client().table("users").update(
-        {"password_hash": hash_password(new_password)}
-    ).eq("id", user_id).execute()
+    get_provider().reset_password(user_id, new_password)
 
 
 def delete_user(user_id: str) -> None:
     """Delete a user. Their assets/maintenance/agent_memory cascade-delete (FK)."""
-    if _is_last_active_admin(user_id):
+    if get_provider().is_last_active_admin(user_id):
         raise ValueError("Cannot delete the last active admin.")
-    get_client().table("users").delete().eq("id", user_id).execute()
-
-
-def _is_last_active_admin(user_id: str) -> bool:
-    """True if user_id is an active admin and the only one."""
-    admins = (
-        get_client()
-        .table("users")
-        .select("id")
-        .eq("role", "admin")
-        .eq("is_active", True)
-        .execute()
-        .data
-    )
-    admin_ids = {a["id"] for a in admins}
-    return admin_ids == {user_id}
+    get_provider().delete_user(user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -157,16 +98,4 @@ def _is_last_active_admin(user_id: str) -> bool:
 
 def bootstrap_admin() -> None:
     """Create the first admin from ADMIN_EMAIL / ADMIN_PASSWORD if no users exist."""
-    count = get_client().table("users").select("id", count="exact").execute().count or 0
-    if count > 0:
-        return
-    email = os.environ.get("ADMIN_EMAIL")
-    password = os.environ.get("ADMIN_PASSWORD")
-    if not email or not password:
-        print(
-            "No users found and ADMIN_EMAIL/ADMIN_PASSWORD not set — "
-            "set them in .env to bootstrap the first admin account."
-        )
-        return
-    create_user(email, password, role="admin")
-    print(f"Bootstrapped admin account: {email.strip().lower()}")
+    get_provider().bootstrap_admin()

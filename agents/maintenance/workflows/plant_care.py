@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from core.session import get_current_user_id
-from db_conn import get_client
+from db import get_provider
 
 PLANT_CARE_PATH = Path(__file__).parent.parent.parent.parent / "data" / "plant_care.json"
 
@@ -38,28 +38,18 @@ def _fuzzy_match(species: str, care_data: dict) -> str:
 def get_plant_care_schedule(asset_id: int) -> dict:
     """Generate a care schedule for a plant/tree asset based on its species."""
     uid = get_current_user_id()
-    client = get_client()
+    history = get_provider().get_asset_history(uid, asset_id)
+    if history.get("status") == "error":
+        return {"error": history["message"]}
 
-    assets = client.table("assets").select("*").eq("id", asset_id).eq("user_id", uid).execute().data
-    if not assets:
-        return {"error": f"No asset found with id {asset_id}"}
-
-    asset = assets[0]
+    asset = history["asset"]
     if asset.get("category") != "plants_trees":
         return {
             "error": f"Asset '{asset['name']}' is not in the plants_trees category",
             "category": asset.get("category"),
         }
 
-    task_rows = (
-        client.table("maintenance_tasks")
-        .select("task_name, completed_date")
-        .eq("asset_id", asset_id)
-        .eq("user_id", uid)
-        .not_.is_("completed_date", "null")
-        .execute()
-        .data
-    )
+    task_rows = [t for t in history["history"] if t.get("completed_date")]
 
     last_tasks: dict[str, str] = {}
     for row in task_rows:

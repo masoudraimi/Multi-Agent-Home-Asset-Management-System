@@ -14,7 +14,7 @@ import hashlib
 import json
 from typing import Any
 
-from db_conn import get_client
+from db import get_provider
 
 EMBEDDING_DIM = 512
 
@@ -41,24 +41,16 @@ class SemanticMemory:
 
     def store(self, content: str, metadata: dict[str, Any] | None = None) -> int:
         embedding = _embed_stub(content)
-        result = get_client().table("semantic_memory").insert({
-            "agent_name": self.agent_name,
-            "content": content,
-            "embedding": json.dumps(embedding),
-            "metadata": json.dumps(metadata or {}),
-        }).execute()
-        return result.data[0]["id"]
+        return get_provider().semantic_store(
+            agent_name=self.agent_name,
+            content=content,
+            embedding=json.dumps(embedding),
+            metadata=json.dumps(metadata or {}),
+        )
 
     def retrieve(self, query: str, top_k: int = 3) -> list[dict[str, Any]]:
         q_emb = _embed_stub(query)
-        rows = (
-            get_client()
-            .table("semantic_memory")
-            .select("id, content, embedding, metadata")
-            .eq("agent_name", self.agent_name)
-            .execute()
-            .data
-        )
+        rows = get_provider().semantic_retrieve(self.agent_name)
         if not rows:
             return []
         scored = []
@@ -75,4 +67,4 @@ class SemanticMemory:
         return scored[:top_k]
 
     def clear(self) -> None:
-        get_client().table("semantic_memory").delete().eq("agent_name", self.agent_name).execute()
+        get_provider().semantic_clear(self.agent_name)

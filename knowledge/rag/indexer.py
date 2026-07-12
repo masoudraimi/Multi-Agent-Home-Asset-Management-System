@@ -9,15 +9,14 @@ import json
 from pathlib import Path
 
 from core.memory.semantic import SemanticMemory
-from db_conn import get_client
+from db import get_provider
 
 DATA_ROOT = Path(__file__).parent.parent.parent / "data"
 
 
 def is_indexed(agent_name: str) -> bool:
     """Return True if semantic memory for this agent already has entries."""
-    result = get_client().table("semantic_memory").select("id", count="exact").eq("agent_name", agent_name).execute()
-    return (result.count or 0) > 0
+    return len(get_provider().semantic_retrieve(agent_name)) > 0
 
 
 def index_plant_care() -> int:

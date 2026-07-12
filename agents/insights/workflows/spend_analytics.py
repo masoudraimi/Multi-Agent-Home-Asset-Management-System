@@ -6,15 +6,14 @@ from collections import defaultdict
 from datetime import date, timedelta
 
 from core.session import get_current_user_id
-from db_conn import get_client
+from db import get_provider
 
 
 def get_total_spend_by_category() -> dict:
     """Return total maintenance spend grouped by asset category."""
     uid = get_current_user_id()
-    client = get_client()
-    assets = client.table("assets").select("id, category").eq("user_id", uid).execute().data
-    tasks = client.table("maintenance_tasks").select("asset_id, cost").eq("user_id", uid).execute().data
+    assets = get_provider().list_assets(uid)["assets"]
+    tasks = get_provider().list_maintenance_tasks(uid)
 
     asset_category = {a["id"]: a["category"] for a in assets}
     totals: dict[str, dict] = {a["category"]: {"total_cost": 0.0, "task_count": 0} for a in assets}
@@ -35,9 +34,8 @@ def get_total_spend_by_category() -> dict:
 def get_top_spending_assets(n: int = 5) -> dict:
     """Return the N assets with the highest total maintenance spend."""
     uid = get_current_user_id()
-    client = get_client()
-    assets = client.table("assets").select("id, name, category").eq("user_id", uid).execute().data
-    tasks = client.table("maintenance_tasks").select("asset_id, cost").eq("user_id", uid).execute().data
+    assets = get_provider().list_assets(uid)["assets"]
+    tasks = get_provider().list_maintenance_tasks(uid)
 
     spend: dict[int, float] = defaultdict(float)
     counts: dict[int, int] = defaultdict(int)
@@ -58,17 +56,9 @@ def get_top_spending_assets(n: int = 5) -> dict:
 
 def get_monthly_spend_trend(months: int = 6) -> dict:
     """Return maintenance spend per month for the last N months."""
-    cutoff = (date.today() - timedelta(days=months * 30)).isoformat()
-    tasks = (
-        get_client()
-        .table("maintenance_tasks")
-        .select("completed_date, cost")
-        .eq("user_id", get_current_user_id())
-        .gte("completed_date", cutoff)
-        .not_.is_("completed_date", "null")
-        .execute()
-        .data
-    )
+    since_date = (date.today() - timedelta(days=months * 30)).isoformat()
+    tasks = get_provider().list_maintenance_tasks(get_current_user_id(), since_date=since_date)
+    tasks = [t for t in tasks if t.get("completed_date")]
 
     monthly: dict[str, float] = defaultdict(float)
     for task in tasks:

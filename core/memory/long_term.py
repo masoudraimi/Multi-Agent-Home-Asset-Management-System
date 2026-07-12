@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 
 from core.session import get_current_user_id
-from db_conn import get_client
+from db import get_provider
 
 
 class LongTermMemory:
@@ -18,49 +18,21 @@ class LongTermMemory:
         self.agent_name = agent_name
 
     def set(self, key: str, value: object) -> None:
-        get_client().table("agent_memory").upsert(
-            {
-                "user_id": get_current_user_id(),
-                "agent_name": self.agent_name,
-                "key": key,
-                "value": json.dumps(value),
-                "updated_at": datetime.now().isoformat(),
-            },
-            on_conflict="user_id,agent_name,key",
-        ).execute()
+        get_provider().memory_set(
+            user_id=get_current_user_id(),
+            agent_name=self.agent_name,
+            key=key,
+            value=json.dumps(value),
+            updated_at=datetime.now().isoformat(),
+        )
 
     def get(self, key: str, default: object = None) -> object:
-        rows = (
-            get_client()
-            .table("agent_memory")
-            .select("value")
-            .eq("user_id", get_current_user_id())
-            .eq("agent_name", self.agent_name)
-            .eq("key", key)
-            .execute()
-            .data
-        )
-        return json.loads(rows[0]["value"]) if rows else default
+        raw = get_provider().memory_get(get_current_user_id(), self.agent_name, key)
+        return json.loads(raw) if raw is not None else default
 
     def delete(self, key: str) -> None:
-        (
-            get_client()
-            .table("agent_memory")
-            .delete()
-            .eq("user_id", get_current_user_id())
-            .eq("agent_name", self.agent_name)
-            .eq("key", key)
-            .execute()
-        )
+        get_provider().memory_delete(get_current_user_id(), self.agent_name, key)
 
     def get_all(self) -> dict[str, object]:
-        rows = (
-            get_client()
-            .table("agent_memory")
-            .select("key, value")
-            .eq("user_id", get_current_user_id())
-            .eq("agent_name", self.agent_name)
-            .execute()
-            .data
-        )
+        rows = get_provider().memory_get_all(get_current_user_id(), self.agent_name)
         return {row["key"]: json.loads(row["value"]) for row in rows}

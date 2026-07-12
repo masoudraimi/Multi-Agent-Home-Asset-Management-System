@@ -1,14 +1,17 @@
-"""Core CRUD functions for the home asset database (Supabase backend).
+"""Core CRUD functions for the home asset database.
 
 These are plain Python functions — no decorator magic. The MCP server in
 tools/mcp_server.py wraps them with the claude-agent-sdk tool decorator.
+
+All DB operations delegate to the active provider via db.get_provider().
+Session concern (current user) is resolved here, not inside the provider.
 """
 
-from datetime import date, datetime, timedelta
 from typing import Optional
 
+from core.observability import audit_log
 from core.session import get_current_user_id
-from db_conn import get_client
+from db import get_provider
 
 
 # ---------------------------------------------------------------------------
@@ -48,18 +51,20 @@ def add_asset(
     planting_date: ISO date when plant was planted
     plant_notes: Plant-specific care notes
     """
-    row = {
-        "name": name, "category": category, "brand": brand, "model": model,
-        "serial": serial, "purchase_date": purchase_date, "purchase_price": purchase_price,
-        "warranty_expiry": warranty_expiry, "location": location, "notes": notes,
-        "plant_species": plant_species, "plant_size": plant_size,
-        "planting_date": planting_date, "plant_notes": plant_notes,
-        "user_id": get_current_user_id(),
-        "created_at": datetime.now().isoformat(),
-    }
-    result = get_client().table("assets").insert(row).execute()
-    asset_id = result.data[0]["id"]
-    return {"status": "created", "asset_id": asset_id, "name": name}
+    try:
+        result = get_provider().add_asset(
+            name=name, category=category, brand=brand, model=model, serial=serial,
+            purchase_date=purchase_date, purchase_price=purchase_price,
+            warranty_expiry=warranty_expiry, location=location, notes=notes,
+            plant_species=plant_species, plant_size=plant_size,
+            planting_date=planting_date, plant_notes=plant_notes,
+            user_id=get_current_user_id(),
+        )
+        audit_log("asset_added", {"name": name, "category": category, "result": result})
+        return result
+    except Exception as exc:
+        audit_log("asset_add_failed", {"name": name, "category": category, "error": str(exc)})
+        raise
 
 
 def list_assets(category: Optional[str] = None) -> dict:
@@ -67,11 +72,7 @@ def list_assets(category: Optional[str] = None) -> dict:
 
     category: Optional filter — one of: appliances, HVAC, plumbing, electrical, exterior, vehicle, garden, plants_trees, other
     """
-    q = get_client().table("assets").select("*").eq("user_id", get_current_user_id())
-    if category:
-        q = q.eq("category", category)
-    rows = q.order("category").order("name").execute().data
-    return {"count": len(rows), "assets": rows}
+    return get_provider().list_assets(get_current_user_id(), category)
 
 
 def search_assets(query: str) -> dict:
@@ -79,13 +80,7 @@ def search_assets(query: str) -> dict:
 
     query: Search term to match against asset fields
     """
-    p = f"%{query}%"
-    rows = get_client().table("assets").select("*").eq(
-        "user_id", get_current_user_id()
-    ).or_(
-        f"name.ilike.{p},brand.ilike.{p},model.ilike.{p},notes.ilike.{p},plant_species.ilike.{p}"
-    ).order("name").execute().data
-    return {"count": len(rows), "assets": rows}
+    return get_provider().search_assets(get_current_user_id(), query)
 
 
 def log_maintenance(
@@ -107,34 +102,16 @@ def log_maintenance(
     next_due_date: ISO date when this task is next due
     interval_days: Recurring interval in days
     """
-    user_id = get_current_user_id()
-    client = get_client()
-    asset = (
-        client.table("assets").select("name")
-        .eq("id", asset_id).eq("user_id", user_id).execute().data
+    return get_provider().log_maintenance(
+        user_id=get_current_user_id(),
+        asset_id=asset_id,
+        task_name=task_name,
+        completed_date=completed_date,
+        cost=cost,
+        notes=notes,
+        next_due_date=next_due_date,
+        interval_days=interval_days,
     )
-    if not asset:
-        return {"status": "error", "message": f"No asset found with id {asset_id}"}
-
-    if not completed_date:
-        completed_date = date.today().isoformat()
-
-    row = {
-        "asset_id": asset_id, "task_name": task_name, "completed_date": completed_date,
-        "cost": cost, "notes": notes, "next_due_date": next_due_date,
-        "interval_days": interval_days, "user_id": user_id,
-        "created_at": datetime.now().isoformat(),
-    }
-    result = client.table("maintenance_tasks").insert(row).execute()
-    task_id = result.data[0]["id"]
-    return {
-        "status": "logged",
-        "task_id": task_id,
-        "asset": asset[0]["name"],
-        "task": task_name,
-        "completed": completed_date,
-        "next_due": next_due_date,
-    }
 
 
 def get_upcoming_maintenance(days_ahead: int = 30) -> dict:
@@ -142,33 +119,7 @@ def get_upcoming_maintenance(days_ahead: int = 30) -> dict:
 
     days_ahead: Number of days to look ahead (default 30)
     """
-    today = date.today()
-    cutoff = (today + timedelta(days=days_ahead)).isoformat()
-    today_str = today.isoformat()
-
-    rows = (
-        get_client()
-        .table("maintenance_tasks")
-        .select("*, assets!inner(name)")
-        .eq("user_id", get_current_user_id())
-        .not_.is_("next_due_date", "null")
-        .lte("next_due_date", cutoff)
-        .order("next_due_date")
-        .execute()
-        .data
-    )
-
-    tasks = []
-    for row in rows:
-        d = {k: v for k, v in row.items() if k != "assets"}
-        d["asset_name"] = row["assets"]["name"]
-        due = date.fromisoformat(d["next_due_date"])
-        delta = (due - today).days
-        d["days_until_due"] = delta
-        d["urgency"] = "overdue" if delta < 0 else "due_soon" if delta <= 7 else "upcoming"
-        tasks.append(d)
-
-    return {"count": len(tasks), "as_of": today_str, "days_ahead": days_ahead, "tasks": tasks}
+    return get_provider().get_upcoming_maintenance(get_current_user_id(), days_ahead)
 
 
 def get_asset_history(asset_id: int) -> dict:
@@ -176,32 +127,7 @@ def get_asset_history(asset_id: int) -> dict:
 
     asset_id: ID of the asset
     """
-    user_id = get_current_user_id()
-    client = get_client()
-    asset = (
-        client.table("assets").select("*")
-        .eq("id", asset_id).eq("user_id", user_id).execute().data
-    )
-    if not asset:
-        return {"status": "error", "message": f"No asset found with id {asset_id}"}
-
-    history = (
-        client.table("maintenance_tasks")
-        .select("*")
-        .eq("asset_id", asset_id)
-        .eq("user_id", user_id)
-        .order("completed_date", desc=True)
-        .order("created_at", desc=True)
-        .execute()
-        .data
-    )
-    total_cost = sum(r["cost"] or 0 for r in history)
-    return {
-        "asset": asset[0],
-        "maintenance_count": len(history),
-        "total_cost": round(total_cost, 2),
-        "history": history,
-    }
+    return get_provider().get_asset_history(get_current_user_id(), asset_id)
 
 
 def update_asset(
@@ -250,17 +176,7 @@ def update_asset(
     if not updates:
         return {"status": "no_change"}
 
-    user_id = get_current_user_id()
-    client = get_client()
-    asset = (
-        client.table("assets").select("name")
-        .eq("id", asset_id).eq("user_id", user_id).execute().data
-    )
-    if not asset:
-        return {"status": "error", "message": f"No asset found with id {asset_id}"}
-
-    client.table("assets").update(updates).eq("id", asset_id).eq("user_id", user_id).execute()
-    return {"status": "updated", "asset_id": asset_id, "fields_updated": list(updates.keys())}
+    return get_provider().update_asset(get_current_user_id(), asset_id, updates)
 
 
 # ---------------------------------------------------------------------------

@@ -45,7 +45,8 @@ def _render_user_list(current_user: dict) -> None:
                 if is_self:
                     label += " *(you)*"
                 st.markdown(label)
-                st.caption(f"Role: {user['role']} · {status} · joined {user['created_at'][:10]}")
+                joined = user['created_at'].strftime("%Y-%m-%d") if hasattr(user['created_at'], 'strftime') else str(user['created_at'])[:10]
+                st.caption(f"Role: {user['role']} · {status} · joined {joined}")
 
             # Toggle role
             with top[1]:

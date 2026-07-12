@@ -7,7 +7,7 @@
 [![OpenRouter](https://img.shields.io/badge/OpenRouter-compatible-74AA9C)](https://openrouter.ai)
 [![MCP](https://img.shields.io/badge/MCP-11%20tools-6E40C9)](https://modelcontextprotocol.io)
 [![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063)](https://docs.pydantic.dev)
-[![Supabase](https://img.shields.io/badge/Supabase-database-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
+[![Neon](https://img.shields.io/badge/Neon-database-00E699?logo=neon&logoColor=black)](https://neon.tech)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-tracing-425CC7?logo=opentelemetry&logoColor=white)](https://opentelemetry.io)
 [![pytest](https://img.shields.io/badge/pytest-%3E%3D9.0-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org)
 
@@ -60,7 +60,7 @@ Shared infrastructure (core/)
   └── OTel tracing       per-turn spans with token/latency/tool-call attributes
 
 Tools (tools/mcp_server.py)
-  11 MCP tools over Supabase: add, list, search, update assets;
+  11 MCP tools: add, list, search, update assets;
   log and query maintenance; onboarding questions; plant care; spend insights
 ```
 
@@ -116,7 +116,7 @@ Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. T
 | LLM | Claude Sonnet 4.6 / Haiku 4.5 |
 | Agent framework (default) | Claude Agent SDK + in-process MCP |
 | Agent framework (alternate) | OpenAI SDK → OpenRouter |
-| Database | Supabase (PostgreSQL) |
+| Database | PostgreSQL (Neon by default; Supabase supported) |
 | Tool protocol | MCP (Model Context Protocol) |
 | Data validation | Pydantic v2 |
 | UI | Streamlit |
@@ -147,99 +147,32 @@ Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. T
 
 - Python 3.13+
 - `uv` package manager
-- A [Supabase](https://supabase.com) project (free tier works)
-- Provider-specific requirement:
+- A PostgreSQL database — [Neon](https://neon.tech) (default, free tier) or [Supabase](https://supabase.com)
+- LLM provider (pick one):
   - **Claude CLI** (default): `claude` CLI installed and authenticated (`claude login`)
   - **Claude SDK**: `ANTHROPIC_API_KEY` in `.env`
   - **OpenRouter**: `OPENROUTER_API_KEY` in `.env`
 
-### 1. Create the database schema
+### 1. Set up the database
 
-**Automatic (recommended):** set `SUPABASE_DB_URL` (or `SUPABASE_DB_PASSWORD`) in
-`.env` — see step 2 — and the app creates the schema for you on first launch.
+The app applies the schema automatically on first launch — no manual SQL required.
 
-**Manual:** otherwise, open the Supabase **SQL Editor** and run:
+**Neon (default):**
 
-```sql
--- Users (multi-user auth). Passwords are bcrypt-hashed by the app.
-CREATE TABLE IF NOT EXISTS users (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email         TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    role          TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
-    is_active     BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+1. Create a free project at [neon.tech](https://neon.tech)
+2. Copy the connection string from the Neon console (Dashboard → Connection Details → Connection string)
+3. Set `DATABASE_URL` in `.env` (see step 2)
 
--- agent_memory is scoped per user; uniqueness is (user_id, agent_name, key).
-CREATE TABLE IF NOT EXISTS agent_memory (
-    id          SERIAL PRIMARY KEY,
-    user_id     UUID REFERENCES users(id) ON DELETE CASCADE,
-    agent_name  TEXT NOT NULL,
-    key         TEXT NOT NULL,
-    value       TEXT NOT NULL,
-    updated_at  TEXT NOT NULL,
-    UNIQUE (user_id, agent_name, key)
-);
+**Supabase (alternative):**
 
--- semantic_memory is shared/global knowledge (plant care, maintenance policies).
-CREATE TABLE IF NOT EXISTS semantic_memory (
-    id          SERIAL PRIMARY KEY,
-    agent_name  TEXT NOT NULL,
-    content     TEXT NOT NULL,
-    embedding   TEXT NOT NULL,
-    metadata    TEXT,
-    created_at  TEXT DEFAULT NOW()
-);
+1. Create a project at [supabase.com](https://supabase.com)
+2. Set `DB_PROVIDER=supabase`, `SUPABASE_URL`, and `SUPABASE_KEY` in `.env`
+3. Optionally set `SUPABASE_DB_URL` or `SUPABASE_DB_PASSWORD` for automatic schema creation; otherwise paste the schema into the Supabase SQL editor manually
 
-CREATE TABLE IF NOT EXISTS assets (
-    id              SERIAL PRIMARY KEY,
-    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name            TEXT NOT NULL,
-    category        TEXT NOT NULL,
-    brand           TEXT,
-    model           TEXT,
-    serial          TEXT,
-    purchase_date   TEXT,
-    purchase_price  REAL,
-    warranty_expiry TEXT,
-    location        TEXT,
-    notes           TEXT,
-    plant_species   TEXT,
-    plant_size      TEXT,
-    planting_date   TEXT,
-    plant_notes     TEXT,
-    created_at      TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS assets_user_id_idx ON assets(user_id);
-
-CREATE TABLE IF NOT EXISTS maintenance_tasks (
-    id              SERIAL PRIMARY KEY,
-    user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    asset_id        INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
-    task_name       TEXT NOT NULL,
-    scheduled_date  TEXT,
-    completed_date  TEXT,
-    cost            REAL,
-    notes           TEXT,
-    next_due_date   TEXT,
-    interval_days   INTEGER,
-    created_at      TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS maintenance_tasks_user_id_idx ON maintenance_tasks(user_id);
-```
-
-> **Multi-user:** Data is isolated per user at the application layer (every query
-> filters by the signed-in user's id). Accounts are created only by an admin via
-> the in-app **Admin** tab — there is no public sign-up. On first run the app
-> bootstraps an admin account from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (see below).
->
-> **Migrating an existing single-tenant DB?** Run, in order:
-> `TRUNCATE maintenance_tasks, assets RESTART IDENTITY CASCADE;` then the
-> `CREATE TABLE users` above, then
-> `ALTER TABLE assets ADD COLUMN user_id UUID REFERENCES users(id) ON DELETE CASCADE;`
-> (and the same for `maintenance_tasks` and `agent_memory`), then recreate the
-> `agent_memory` unique constraint as `(user_id, agent_name, key)`.
+> **Multi-user:** Data is isolated per user at the application layer — every query
+> filters by the signed-in user's ID. Accounts are created only by an admin via
+> the in-app **Admin** tab; there is no public sign-up. On first run the app
+> bootstraps an admin account from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
 ### 2. Configure environment variables
 
@@ -254,37 +187,35 @@ cp .env.example .env   # then fill in your values
 `.env`:
 
 ```env
-# Supabase (required) — use the service_role key for backend access
-SUPABASE_URL=https://<your-project-ref>.supabase.co
-SUPABASE_KEY=<your-service-role-key>
+# ── Database provider ─────────────────────────────────────────────────────────
+DB_PROVIDER=neon          # or: supabase
 
-# Auto-schema creation (optional but recommended). The app creates the
-# multi-user schema on startup over a direct Postgres connection. Provide ONE:
-#   SUPABASE_DB_URL=postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres
-#   (Project Settings -> Database -> Connection string), or just:
-# SUPABASE_DB_PASSWORD=<your-database-password>
-# If neither is set, run the schema SQL manually in the Supabase SQL editor.
+# ── Neon / standard PostgreSQL (used when DB_PROVIDER=neon) ──────────────────
+DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
 
-# First-admin bootstrap (created automatically on first run if no users exist)
+# ── Supabase (used when DB_PROVIDER=supabase) ─────────────────────────────────
+# SUPABASE_URL=https://<your-project-ref>.supabase.co
+# SUPABASE_KEY=<your-service-role-key>
+# SUPABASE_DB_URL=postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres
+
+# ── Admin bootstrap ───────────────────────────────────────────────────────────
 ADMIN_EMAIL=you@example.com
 ADMIN_PASSWORD=<choose-a-strong-password>
 
-# LLM provider (default: claude_cli — no API key needed if claude CLI is authenticated)
-# LLM_PROVIDER=claude_cli
-
-# Uncomment one of the below if switching providers:
+# ── LLM provider ──────────────────────────────────────────────────────────────
+# LLM_PROVIDER=claude_cli    # default — no API key needed if claude CLI is authenticated
 # LLM_PROVIDER=claude_sdk
 # ANTHROPIC_API_KEY=sk-ant-...
-
 # LLM_PROVIDER=openrouter
 # OPENROUTER_API_KEY=sk-or-...
 
-# Optional: Telegram maintenance digest
+# ── Optional integrations ─────────────────────────────────────────────────────
 # TELEGRAM_BOT_TOKEN=...
 # TELEGRAM_CHAT_ID=...
 ```
 
-> **Note**: use the `service_role` key (found in Supabase → Project Settings → Data API), not the `publishable`/`anon` key. The service role key bypasses Row Level Security, which is appropriate for a backend app.
+> **Switching databases:** change `DB_PROVIDER` and supply the matching credentials.
+> The schema is applied automatically either way — no manual SQL needed.
 
 ### 3. Run the app
 
@@ -309,15 +240,24 @@ Benchmarks cover the orchestrator, asset agent, and maintenance agent across sim
 1. Push your repo to GitHub
 2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app** → connect your repo
 3. Set the entry point to `app.py`
-4. Under **Secrets**, add:
+4. Under **Secrets**, add your database and LLM credentials:
 
 ```toml
-SUPABASE_URL = "https://<your-project-ref>.supabase.co"
-SUPABASE_KEY = "<your-service-role-key>"
+# Neon (default)
+DB_PROVIDER = "neon"
+DATABASE_URL = "postgresql://user:password@host/dbname?sslmode=require"
+
+# Or Supabase
+# DB_PROVIDER = "supabase"
+# SUPABASE_URL = "https://<ref>.supabase.co"
+# SUPABASE_KEY = "<service-role-key>"
+
+ADMIN_EMAIL = "you@example.com"
+ADMIN_PASSWORD = "..."
 ANTHROPIC_API_KEY = "sk-ant-..."
 ```
 
-The app will seed the database on first launch. Data persists in Supabase across deployments.
+The schema is applied automatically on first launch. Data persists in your database across deployments.
 
 
 
@@ -359,14 +299,18 @@ home-asset-agent/
 │   ├── guardrails.py      injection detection + output sanitisation
 │   ├── event_bus.py       publish/subscribe for UI events
 │   └── observability.py   OTel tracer setup
+├── db/
+│   ├── base.py            DBProvider protocol (swappable contract)
+│   ├── neon.py            NeonProvider: psycopg3 + raw SQL (default)
+│   ├── supabase.py        SupabaseProvider: Supabase SDK
+│   └── __init__.py        get_provider() factory (reads DB_PROVIDER)
 ├── tools/
-│   ├── db.py              Supabase tool implementations
+│   ├── db.py              CRUD tool implementations (provider-agnostic)
 │   └── mcp_server.py      MCP server + OpenAI tool schemas + dispatcher
 ├── components/            Streamlit tab components
 ├── data/                  asset_questions.json, plant_care.json, checklist
 ├── eval/                  benchmark runner + per-agent scenario files
 ├── knowledge/             RAG indexer, prompt library, maintenance policies
 ├── app.py                 Streamlit entry point
-├── db_conn.py             Supabase client factory
-└── db_init.py             Seed data (runs automatically on first launch)
+└── db_init.py             Schema bootstrap + admin seed (runs on first launch)
 ```

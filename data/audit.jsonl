@@ -1,0 +1,3 @@
+{"ts": 1783827655.7523682, "event": "approval_requested", "request_id": "Front Ga", "agent_name": "asset", "asset_name": "Front Garden's White Rose Tree", "category": "plants_trees"}
+{"ts": 1783827673.406224, "event": "approval_confirmed", "request_id": "Front Ga", "agent_name": "asset", "payload": {"name": "Front Garden's White Rose Tree", "category": "plants_trees", "plant_species": "White Rose (Rosa)", "plant_size": "1m", "location": "Front Garden", "planting_date": null, "notes": "Standard rose tree, white flowering variety"}}
+{"ts": 1783827678.7454154, "event": "asset_added", "name": "Front Garden's White Rose Tree", "category": "plants_trees", "result": {"status": "created", "asset_id": 1, "name": "Front Garden's White Rose Tree"}}

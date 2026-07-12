@@ -4,6 +4,7 @@ import streamlit as st
 
 from agent.context import ConversationContext
 from agent.runner import run_turn
+from core.observability import audit_log
 
 _URGENCY_COLOUR = {
     "overdue": "#d32f2f",
@@ -54,6 +55,11 @@ def _render_approval_cards() -> None:
 
             col_confirm, col_cancel = st.columns(2)
             if col_confirm.button("Confirm", key=f"approve_{request_id}", type="primary"):
+                audit_log("approval_confirmed", {
+                    "request_id": request_id,
+                    "agent_name": approval["agent_name"],
+                    "payload": approval["payload"],
+                })
                 del pending[request_id]
                 st.session_state.chat_messages.append({
                     "role": "user",
@@ -61,12 +67,57 @@ def _render_approval_cards() -> None:
                 })
                 st.rerun()
             if col_cancel.button("Cancel", key=f"cancel_{request_id}"):
+                audit_log("approval_cancelled", {
+                    "request_id": request_id,
+                    "agent_name": approval["agent_name"],
+                })
                 del pending[request_id]
                 st.session_state.chat_messages.append({
                     "role": "user",
                     "content": "__approval_cancelled__",
                 })
                 st.rerun()
+
+
+def _maybe_process_approval(ctx: ConversationContext) -> None:
+    """If the last chat message is __approval_confirmed__, auto-trigger the agent turn."""
+    msgs = st.session_state.get("chat_messages", [])
+    if not msgs or msgs[-1]["content"] != "__approval_confirmed__":
+        return
+
+    with st.chat_message("assistant"):
+        tool_events: list[dict] = []
+        answer = ""
+        metrics: dict = {}
+        step = 0
+        result_placeholder = st.empty()
+
+        for event in run_turn("__approval_confirmed__", ctx):
+            if event["type"] == "tool_call":
+                step += 1
+                tool_events.append({"call": event, "result": None, "step": step})
+                _tool_call_card(event, step)
+            elif event["type"] == "tool_result":
+                for t in tool_events:
+                    if t["call"]["call_id"] == event["call_id"]:
+                        t["result"] = event
+                        _tool_result_card(event, t["step"])
+                        break
+            elif event["type"] == "assistant_text":
+                answer = event["content"]
+                result_placeholder.markdown(answer)
+            elif event["type"] == "metrics":
+                metrics = event
+
+    st.session_state.chat_messages.append({
+        "role": "assistant",
+        "content": answer,
+        "tool_events": tool_events,
+        "metrics": metrics,
+    })
+    if metrics:
+        st.session_state.turn_metrics.append(metrics)
+    st.rerun()
 
 
 def _tool_call_card(event: dict, index: int) -> None:
@@ -103,6 +154,7 @@ def render_chat_tab() -> None:
                 _render_assistant_entry(entry)
 
     _render_approval_cards()
+    _maybe_process_approval(ctx)
 
     if prompt := st.chat_input("Ask about your home assets…"):
         st.session_state.chat_messages.append({"role": "user", "content": prompt})

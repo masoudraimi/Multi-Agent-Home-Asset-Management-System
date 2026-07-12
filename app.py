@@ -82,9 +82,9 @@ with st.sidebar:
         st.rerun()
 
 # Tabs
-tab_labels = ["💬 Chat", "📦 Assets", "🗓 Schedule", "📊 Performance", "🔭 Observability"]
+tab_labels = ["💬 Chat", "📦 Assets", "🗓 Schedule", "📊 Performance"]
 if is_admin:
-    tab_labels.append("👤 Admin")
+    tab_labels += ["🔭 Observability", "👤 Admin"]
 
 tabs = st.tabs(tab_labels)
 
@@ -100,9 +100,8 @@ with tabs[2]:
 with tabs[3]:
     render_performance_tab()
 
-with tabs[4]:
-    render_observability_tab()
-
 if is_admin:
+    with tabs[4]:
+        render_observability_tab()
     with tabs[5]:
         render_admin_tab(user)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 from pathlib import Path
 
@@ -98,9 +99,11 @@ def _render_audit_log() -> None:
     events.reverse()
 
     for ev in events[:20]:
-        event_type = ev.get("event_type", "unknown")
-        ts = ev.get("timestamp", "")[:19].replace("T", " ")
-        agent = ev.get("data", {}).get("agent_name", "")
+        event_type = ev.get("event", "unknown")
+        ts_raw = ev.get("ts", 0)
+        ts = datetime.datetime.fromtimestamp(ts_raw).strftime("%Y-%m-%d %H:%M:%S") if ts_raw else ""
+        agent = ev.get("agent_name", "")
         label = f"`{ts}` **{event_type}**" + (f" — {agent}" if agent else "")
+        detail = {k: v for k, v in ev.items() if k not in ("ts", "event")}
         with st.expander(label, expanded=False):
-            st.json(ev.get("data", {}))
+            st.json(detail)
