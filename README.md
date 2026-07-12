@@ -286,11 +286,16 @@ home-asset-agent/
 │   ├── asset/
 │   │   ├── agent.py / agent.yaml / prompts/system.md
 │   │   └── workflows/onboarding.py    LLM-as-judge asset review
+│   │   └── workflows/suggestions.py   missing asset gap analysis
 │   ├── maintenance/
 │   │   ├── agent.py / agent.yaml / prompts/system.md
+│   │   ├── workflows/plant_care.py    species-specific care schedules
+│   │   ├── workflows/scheduling.py    overdue task detection
 │   │   └── workflows/telegram.py      push digest
 │   └── insights/
-│       └── agent.py / agent.yaml / prompts/system.md
+│       ├── agent.py / agent.yaml / prompts/system.md
+│       ├── workflows/spend_analytics.py
+│       └── workflows/warranty_alerts.py
 ├── core/
 │   ├── base_agent.py      provider-aware agent loop
 │   ├── models.py          Provider enum, resolve_model(), simple_complete()
@@ -298,19 +303,36 @@ home-asset-agent/
 │   ├── memory/            short_term (sliding window), long_term, semantic
 │   ├── guardrails.py      injection detection + output sanitisation
 │   ├── event_bus.py       publish/subscribe for UI events
+│   ├── events.py          event dataclasses (HumanApprovalRequested, etc.)
+│   ├── executor.py        WorkflowExecutor (sequential/parallel/retry)
+│   ├── session.py         per-user data isolation via contextvars
 │   └── observability.py   OTel tracer setup
 ├── db/
 │   ├── base.py            DBProvider protocol (swappable contract)
 │   ├── neon.py            NeonProvider: psycopg3 + raw SQL (default)
 │   ├── supabase.py        SupabaseProvider: Supabase SDK
 │   └── __init__.py        get_provider() factory (reads DB_PROVIDER)
+├── schema/
+│   ├── __init__.py        central registry: get_questions(), get_checklist(), get_plant_care()
+│   ├── models.py          Pydantic models: CategorySchema, PlantCategorySchema
+│   ├── appliances.py / hvac.py / plumbing.py / electrical.py
+│   ├── exterior.py / vehicle.py / garden.py / other.py
+│   └── plants_trees.py    species-specific care data (21KB)
 ├── tools/
 │   ├── db.py              CRUD tool implementations (provider-agnostic)
-│   └── mcp_server.py      MCP server + OpenAI tool schemas + dispatcher
+│   ├── mcp_server.py      MCP server + OpenAI tool schemas + dispatcher
+│   └── stdio_server.py    stdio MCP server for claude_cli provider path
 ├── components/            Streamlit tab components
-├── data/                  asset_questions.json, plant_care.json, checklist
+├── knowledge/
+│   ├── rag/indexer.py     RAG indexer for plant care + asset checklists
+│   ├── prompts/library.yaml  reusable prompt templates
+│   └── policies/maintenance_policies.yaml
 ├── eval/                  benchmark runner + per-agent scenario files
-├── knowledge/             RAG indexer, prompt library, maintenance policies
+├── scripts/
+│   └── send_monthly_reminder.py   cron-compatible Telegram digest trigger
+├── agent/                 backward-compat shims (runner.py, context.py)
+├── workflows/             backward-compat shims → agents/*/workflows/
+├── skills/                backward-compat shims → agents/*/workflows/
 ├── app.py                 Streamlit entry point
-└── db_init.py             Schema bootstrap + admin seed (runs on first launch)
+└── db_init.py             schema bootstrap + admin seed (runs on first launch)
 ```
