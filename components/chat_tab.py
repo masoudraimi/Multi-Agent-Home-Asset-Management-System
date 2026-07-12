@@ -1,3 +1,4 @@
+import html
 import json
 
 import streamlit as st
@@ -10,6 +11,21 @@ _URGENCY_COLOUR = {
     "overdue": "#d32f2f",
     "due_soon": "#f57c00",
     "upcoming": "#388e3c",
+}
+
+_TOOL_ICONS = {
+    "add_asset": "📦",
+    "list_assets": "📋",
+    "search_assets": "🔍",
+    "update_asset": "✏️",
+    "log_maintenance": "🔧",
+    "get_upcoming_maintenance": "🗓",
+    "get_asset_history": "📜",
+    "get_onboarding_questions": "❓",
+    "review_asset_draft": "🔎",
+    "get_plant_care_schedule": "🌿",
+    "suggest_missing_assets": "💡",
+    "get_expiring_warranties": "⚠️",
 }
 
 
@@ -47,36 +63,54 @@ def _render_approval_cards() -> None:
 
     for request_id, approval in list(pending.items()):
         st.markdown("---")
-        with st.container(border=True):
-            st.markdown(f"**Action requires your approval**")
-            st.caption(f"Agent: `{approval['agent_name']}` | ID: `{request_id[:8]}...`")
-            st.markdown(f"{approval['action_description']}")
+        # Styled approval banner
+        st.html(f"""
+        <div style="
+            border-left: 4px solid #f57c00;
+            background: linear-gradient(135deg, rgba(245,124,0,0.12), rgba(245,124,0,0.04));
+            border-radius: 0 12px 12px 0;
+            padding: 14px 18px;
+            margin-bottom: 8px;
+            font-family: system-ui, sans-serif;
+        ">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+                <span style="font-size: 18px;">⚠️</span>
+                <span style="font-weight: 700; font-size: 15px; color: #f57c00;">Action requires your approval</span>
+            </div>
+            <div style="font-size: 12px; color: rgba(255,255,255,0.45); margin-bottom: 8px;">
+                Agent: <code style="background: rgba(255,255,255,0.1); border-radius: 4px; padding: 1px 6px;">{html.escape(approval['agent_name'])}</code>
+                &nbsp;·&nbsp; ID: <code style="background: rgba(255,255,255,0.1); border-radius: 4px; padding: 1px 6px;">{html.escape(request_id[:8])}&hellip;</code>
+            </div>
+            <div style="font-size: 14px; color: #E6EDF3;">{html.escape(approval['action_description'])}</div>
+        </div>
+        """)
+        with st.expander("View payload", expanded=False):
             st.json(approval["payload"])
 
-            col_confirm, col_cancel = st.columns(2)
-            if col_confirm.button("Confirm", key=f"approve_{request_id}", type="primary"):
-                audit_log("approval_confirmed", {
-                    "request_id": request_id,
-                    "agent_name": approval["agent_name"],
-                    "payload": approval["payload"],
-                })
-                del pending[request_id]
-                st.session_state.chat_messages.append({
-                    "role": "user",
-                    "content": "__approval_confirmed__",
-                })
-                st.rerun()
-            if col_cancel.button("Cancel", key=f"cancel_{request_id}"):
-                audit_log("approval_cancelled", {
-                    "request_id": request_id,
-                    "agent_name": approval["agent_name"],
-                })
-                del pending[request_id]
-                st.session_state.chat_messages.append({
-                    "role": "user",
-                    "content": "__approval_cancelled__",
-                })
-                st.rerun()
+        col_confirm, col_cancel, col_spacer = st.columns([1, 1, 3])
+        if col_confirm.button("✓ Confirm", key=f"approve_{request_id}", type="primary"):
+            audit_log("approval_confirmed", {
+                "request_id": request_id,
+                "agent_name": approval["agent_name"],
+                "payload": approval["payload"],
+            })
+            del pending[request_id]
+            st.session_state.chat_messages.append({
+                "role": "user",
+                "content": "__approval_confirmed__",
+            })
+            st.rerun()
+        if col_cancel.button("✕ Cancel", key=f"cancel_{request_id}"):
+            audit_log("approval_cancelled", {
+                "request_id": request_id,
+                "agent_name": approval["agent_name"],
+            })
+            del pending[request_id]
+            st.session_state.chat_messages.append({
+                "role": "user",
+                "content": "__approval_cancelled__",
+            })
+            st.rerun()
 
 
 def _maybe_process_approval(ctx: ConversationContext) -> None:
@@ -121,14 +155,108 @@ def _maybe_process_approval(ctx: ConversationContext) -> None:
 
 
 def _tool_call_card(event: dict, index: int) -> None:
-    args_str = json.dumps(event["args"], indent=2)
-    with st.expander(f"Step {index}: `{event['name']}`", expanded=False):
-        st.code(args_str, language="json")
+    tool_name = event["name"]
+    icon = _TOOL_ICONS.get(tool_name, "🔩")
+    args_pretty = json.dumps(event["args"], indent=2)
+    args_html = html.escape(args_pretty)
+
+    st.html(f"""
+    <div style="
+        margin: 5px 0;
+        border-left: 3px solid #6C63FF;
+        background: rgba(108,99,255,0.07);
+        border-radius: 0 8px 8px 0;
+        padding: 10px 14px;
+        font-family: system-ui, sans-serif;
+    ">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span style="
+                background: #6C63FF;
+                color: white;
+                border-radius: 50%;
+                width: 22px; height: 22px;
+                display: inline-flex; align-items: center; justify-content: center;
+                font-size: 11px; font-weight: 700; flex-shrink: 0;
+            ">{index}</span>
+            <span style="font-size: 16px;">{icon}</span>
+            <code style="
+                background: rgba(108,99,255,0.25);
+                color: #b0abff;
+                border-radius: 5px;
+                padding: 2px 10px;
+                font-size: 13px; font-weight: 600;
+            ">{html.escape(tool_name)}</code>
+            <span style="color: rgba(255,255,255,0.3); font-size: 11px; margin-left: auto;">tool call</span>
+        </div>
+        <pre style="
+            background: rgba(0,0,0,0.35);
+            border-radius: 6px; padding: 10px;
+            font-size: 11px; color: #a0a8c0;
+            overflow-x: auto; margin: 0;
+            white-space: pre-wrap; word-break: break-all;
+            max-height: 200px;
+        ">{args_html}</pre>
+    </div>
+    """)
 
 
 def _tool_result_card(event: dict, index: int) -> None:
-    with st.expander(f"Step {index} result", expanded=False):
-        st.json(event["result"])
+    result = event["result"]
+    result_str = json.dumps(result, indent=2) if isinstance(result, (dict, list)) else str(result)
+    result_html = html.escape(result_str)
+    # Truncate long results for display
+    lines = result_str.splitlines()
+    truncated = len(lines) > 30
+    display_html = html.escape("\n".join(lines[:30]) + ("\n…(truncated)" if truncated else ""))
+
+    st.html(f"""
+    <div style="
+        margin: 3px 0 10px 28px;
+        border-left: 3px solid #238636;
+        background: rgba(35,134,54,0.07);
+        border-radius: 0 8px 8px 0;
+        padding: 8px 14px;
+        font-family: system-ui, sans-serif;
+    ">
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+            <span style="color: #3fb950; font-size: 12px; font-weight: 600;">✓ result</span>
+            <span style="color: rgba(255,255,255,0.3); font-size: 11px;">step {index}</span>
+        </div>
+        <pre style="
+            background: rgba(0,0,0,0.3);
+            border-radius: 6px; padding: 8px;
+            font-size: 11px; color: #8b949e;
+            overflow-x: auto; margin: 0;
+            white-space: pre-wrap; word-break: break-all;
+            max-height: 160px;
+        ">{display_html}</pre>
+    </div>
+    """)
+
+
+def _metrics_badge(metrics: dict, ctx: ConversationContext | None = None) -> None:
+    tool_count = metrics.get("tool_call_count", 0)
+    latency = metrics.get("latency_ms", 0)
+    tokens = metrics.get("tokens", 0)
+    ctx_est = f" &nbsp;·&nbsp; ctx≈{ctx.token_estimate} tok" if ctx else ""
+
+    st.html(f"""
+    <div style="
+        display: inline-flex; align-items: center; gap: 10px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 20px; padding: 3px 12px;
+        font-size: 11px; color: rgba(255,255,255,0.45);
+        font-family: system-ui, sans-serif;
+        margin-top: 6px;
+    ">
+        <span>🔩 {tool_count} tools</span>
+        <span style="opacity:0.4">·</span>
+        <span>⏱ {latency}ms</span>
+        <span style="opacity:0.4">·</span>
+        <span>🪙 {tokens} tok{ctx_est}</span>
+    </div>
+    """)
 
 
 def render_chat_tab() -> None:
@@ -190,12 +318,7 @@ def render_chat_tab() -> None:
                     metrics = event
 
             if metrics:
-                st.caption(
-                    f"Tools: {metrics['tool_call_count']} calls · "
-                    f"{metrics['latency_ms']}ms · "
-                    f"{metrics['tokens']} tokens · "
-                    f"ctx≈{ctx.token_estimate} tokens"
-                )
+                _metrics_badge(metrics, ctx)
 
         st.session_state.chat_messages.append({
             "role": "assistant",
@@ -217,8 +340,4 @@ def _render_assistant_entry(entry: dict) -> None:
     st.markdown(entry["content"])
     m = entry.get("metrics", {})
     if m:
-        st.caption(
-            f"Tools: {m.get('tool_call_count', 0)} calls · "
-            f"{m.get('latency_ms', 0)}ms · "
-            f"{m.get('tokens', 0)} tokens"
-        )
+        _metrics_badge(m)

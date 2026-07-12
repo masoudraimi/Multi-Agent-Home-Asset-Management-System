@@ -14,6 +14,151 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.markdown("""
+<style>
+/* ── Layout ─────────────────────────────────────── */
+.block-container { padding-top: 4rem !important; padding-bottom: 2rem !important; }
+
+/* ── Smooth transitions ─────────────────────────── */
+*, *::before, *::after {
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* ── Scrollbar ──────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(108,99,255,0.5); }
+
+/* ── Tabs ───────────────────────────────────────── */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+    padding-bottom: 0 !important;
+}
+.stTabs [data-baseweb="tab"] {
+    border-radius: 8px 8px 0 0 !important;
+    padding: 8px 18px !important;
+    font-weight: 500;
+    color: rgba(255,255,255,0.55) !important;
+}
+.stTabs [aria-selected="true"] {
+    background: rgba(108,99,255,0.15) !important;
+    color: #a09af0 !important;
+    border-bottom: 2px solid #6C63FF !important;
+}
+
+/* ── Buttons ────────────────────────────────────── */
+.stButton > button {
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.01em !important;
+    transition: all 0.2s ease !important;
+}
+.stButton > button:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 14px rgba(108,99,255,0.35) !important;
+}
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #6C63FF, #8b85ff) !important;
+    border: none !important;
+}
+
+/* ── Bordered containers ────────────────────────── */
+[data-testid="stVerticalBlock"] > div > [data-testid="stVerticalBlockBorderWrapper"] > div {
+    border-radius: 12px !important;
+    border: 1px solid rgba(255,255,255,0.09) !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25) !important;
+    background: rgba(255,255,255,0.02) !important;
+}
+
+/* ── Metric tiles ───────────────────────────────── */
+[data-testid="metric-container"] {
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    border-radius: 10px !important;
+    padding: 14px 16px !important;
+    background: rgba(255,255,255,0.025) !important;
+}
+[data-testid="metric-container"] label {
+    color: rgba(255,255,255,0.5) !important;
+    font-size: 12px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.06em !important;
+}
+[data-testid="metric-container"] [data-testid="stMetricValue"] {
+    font-size: 26px !important;
+    font-weight: 700 !important;
+    color: #E6EDF3 !important;
+}
+
+/* ── Expanders ──────────────────────────────────── */
+[data-testid="stExpander"] {
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 8px !important;
+    background: rgba(255,255,255,0.02) !important;
+    overflow: hidden !important;
+}
+[data-testid="stExpander"] summary {
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+}
+[data-testid="stExpander"] summary:hover {
+    background: rgba(108,99,255,0.08) !important;
+}
+
+/* ── Sidebar ────────────────────────────────────── */
+[data-testid="stSidebar"] {
+    border-right: 1px solid rgba(255,255,255,0.07) !important;
+    background: rgba(22,27,34,0.95) !important;
+}
+
+/* ── Chat messages ──────────────────────────────── */
+[data-testid="stChatMessage"] {
+    border-radius: 12px !important;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+    margin-bottom: 6px !important;
+    padding: 12px 16px !important;
+    background: rgba(255,255,255,0.02) !important;
+}
+
+/* ── Chat input ─────────────────────────────────── */
+[data-testid="stChatInputContainer"] > div {
+    border-radius: 12px !important;
+    border: 1px solid rgba(108,99,255,0.35) !important;
+    background: rgba(108,99,255,0.05) !important;
+}
+[data-testid="stChatInputContainer"] > div:focus-within {
+    border-color: #6C63FF !important;
+    box-shadow: 0 0 0 3px rgba(108,99,255,0.2) !important;
+}
+
+/* ── Dataframes ─────────────────────────────────── */
+[data-testid="stDataFrame"] > div {
+    border-radius: 10px !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    overflow: hidden !important;
+}
+
+/* ── Selectbox / Slider ─────────────────────────── */
+[data-testid="stSelectbox"] > div > div {
+    border-radius: 8px !important;
+    border-color: rgba(255,255,255,0.12) !important;
+}
+[data-testid="stSlider"] [role="slider"] {
+    background: #6C63FF !important;
+}
+
+/* ── Success / Info / Error banners ─────────────── */
+[data-testid="stAlert"] {
+    border-radius: 10px !important;
+    border-left-width: 4px !important;
+}
+
+/* ── Divider ────────────────────────────────────── */
+hr { border-color: rgba(255,255,255,0.08) !important; }
+</style>
+""", unsafe_allow_html=True)
+
 from components.admin_tab import render_admin_tab
 from components.assets_tab import render_assets_tab
 from components.chat_tab import render_chat_tab

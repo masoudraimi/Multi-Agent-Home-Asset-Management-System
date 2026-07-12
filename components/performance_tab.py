@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 RESULTS_PATH = Path(__file__).parent.parent / "eval" / "results.json"
@@ -77,10 +78,35 @@ def _render_session_metrics() -> None:
     c2.metric("Avg latency", f"{int(df['latency_ms'].mean())}ms")
     c3.metric("Avg tool calls / turn", f"{df['tool_call_count'].mean():.1f}")
 
-    st.bar_chart(df[["latency_ms", "tokens"]].rename(columns={
-        "latency_ms": "Latency (ms)",
-        "tokens": "Tokens",
-    }))
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        name="Latency (ms)",
+        x=df.index,
+        y=df["latency_ms"],
+        marker_color="#6C63FF",
+        marker_line_width=0,
+    ))
+    fig.add_trace(go.Bar(
+        name="Tokens",
+        x=df.index,
+        y=df["tokens"],
+        marker_color="#00c4a0",
+        marker_line_width=0,
+    ))
+    fig.update_layout(
+        barmode="group",
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#E6EDF3", size=12),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=0, r=0, t=30, b=0),
+        height=280,
+        xaxis=dict(gridcolor="rgba(255,255,255,0.06)", tickfont=dict(size=11)),
+        yaxis=dict(gridcolor="rgba(255,255,255,0.06)"),
+        bargap=0.25,
+        bargroupgap=0.1,
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 def _render_summary(summary: dict) -> None:
