@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from core.models import simple_complete
 
 from core.event_bus import EventBus
 from core.events import HumanApprovalRequested
 from core.observability import audit_log
-
-QUESTIONS_PATH = Path(__file__).parent.parent.parent.parent / "data" / "asset_questions.json"
-
+from schema import get_questions
 
 _SYNONYMS = {
     "plant": "plants_trees", "tree": "plants_trees", "garden plant": "plants_trees",
@@ -27,10 +24,9 @@ _SYNONYMS = {
 
 def get_onboarding_questions(asset_type: str) -> dict:
     """Return type-specific guided questions for asset onboarding."""
-    questions_data = json.loads(QUESTIONS_PATH.read_text())
     category = asset_type.lower().strip()
     mapped = _SYNONYMS.get(category, category)
-    questions = questions_data.get(mapped, questions_data.get("other", []))
+    questions = get_questions(mapped) or get_questions("other")
     return {
         "asset_type": mapped,
         "questions": questions,

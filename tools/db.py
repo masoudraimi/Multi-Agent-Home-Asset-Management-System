@@ -33,6 +33,10 @@ def add_asset(
     plant_size: Optional[str] = None,
     planting_date: Optional[str] = None,
     plant_notes: Optional[str] = None,
+    is_indoor: Optional[bool] = None,
+    rego_plate: Optional[str] = None,
+    odometer_km: Optional[int] = None,
+    next_service_km: Optional[int] = None,
 ) -> dict:
     """Register a new home asset in the database.
 
@@ -46,10 +50,14 @@ def add_asset(
     warranty_expiry: ISO date string YYYY-MM-DD when warranty expires
     location: Room or area, e.g. 'Kitchen', 'Back yard left corner'
     notes: Any additional notes
-    plant_species: Species name for plants_trees category (e.g. 'lemon tree', 'agapanthus')
+    plant_species: Species name for plants_trees category (e.g. 'lemon tree', 'monstera')
     plant_size: Size for plants: small, medium, large, or mature
     planting_date: ISO date when plant was planted
     plant_notes: Plant-specific care notes
+    is_indoor: True if the plant is kept indoors, False if outdoors (plants_trees only)
+    rego_plate: Registration plate number (vehicle only)
+    odometer_km: Current odometer reading in kilometres (vehicle only)
+    next_service_km: Odometer reading at which next service is due (vehicle only)
     """
     try:
         result = get_provider().add_asset(
@@ -58,6 +66,8 @@ def add_asset(
             warranty_expiry=warranty_expiry, location=location, notes=notes,
             plant_species=plant_species, plant_size=plant_size,
             planting_date=planting_date, plant_notes=plant_notes,
+            is_indoor=is_indoor, rego_plate=rego_plate,
+            odometer_km=odometer_km, next_service_km=next_service_km,
             user_id=get_current_user_id(),
         )
         audit_log("asset_added", {"name": name, "category": category, "result": result})
@@ -146,6 +156,10 @@ def update_asset(
     plant_size: Optional[str] = None,
     planting_date: Optional[str] = None,
     plant_notes: Optional[str] = None,
+    is_indoor: Optional[bool] = None,
+    rego_plate: Optional[str] = None,
+    odometer_km: Optional[int] = None,
+    next_service_km: Optional[int] = None,
 ) -> dict:
     """Update one or more fields on an existing asset.
 
@@ -171,6 +185,8 @@ def update_asset(
         "warranty_expiry": warranty_expiry, "location": location, "notes": notes,
         "plant_species": plant_species, "plant_size": plant_size,
         "planting_date": planting_date, "plant_notes": plant_notes,
+        "is_indoor": is_indoor, "rego_plate": rego_plate,
+        "odometer_km": odometer_km, "next_service_km": next_service_km,
     }.items() if v is not None}
 
     if not updates:
@@ -182,6 +198,14 @@ def update_asset(
 # ---------------------------------------------------------------------------
 # Tools delegating to workflows
 # ---------------------------------------------------------------------------
+
+def get_expiring_warranties(days_ahead: int = 90) -> dict:
+    """Find assets whose warranty expires within the next N days.
+
+    days_ahead: How many days forward to look (default 90)
+    """
+    return get_provider().get_expiring_warranties(get_current_user_id(), days_ahead)
+
 
 def get_onboarding_questions(asset_type: str) -> dict:
     """Get guided onboarding questions for a specific asset type.

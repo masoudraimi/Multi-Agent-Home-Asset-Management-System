@@ -3,23 +3,14 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from pathlib import Path
-
-import yaml
 
 from core.session import get_current_user_id
 from db import get_provider
-
-POLICIES_PATH = Path(__file__).parent.parent.parent.parent / "knowledge" / "policies" / "maintenance_policies.yaml"
-
-_POLICIES: dict | None = None
+from schema import get_maintenance_policies
 
 
 def _load_policies() -> dict:
-    global _POLICIES
-    if _POLICIES is None:
-        _POLICIES = yaml.safe_load(POLICIES_PATH.read_text()) if POLICIES_PATH.exists() else {}
-    return _POLICIES
+    return get_maintenance_policies()
 
 
 def get_policy_schedule(asset_category: str, asset_model: str | None = None) -> list[dict]:

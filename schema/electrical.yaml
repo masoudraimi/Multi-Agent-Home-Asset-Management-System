@@ -1,0 +1,44 @@
+category: electrical
+
+onboarding_questions:
+  - What type? (smoke alarm, switchboard, solar panels, EV charger, ceiling fan)
+  - What brand or model?
+  - When was it installed?
+  - Where is it located?
+  - Any battery replacement date you know of?
+
+checklist:
+  - name: Smoke alarms
+    priority: high
+    reason: Battery replacement every 12 months — legally required
+  - name: Carbon monoxide detector
+    priority: high
+    reason: Critical for gas appliance homes
+  - name: Switchboard / circuit breakers
+    priority: high
+    reason: Inspect for signs of burning or outdated fuses
+  - name: Solar panels
+    priority: medium
+    reason: Annual cleaning and inverter check
+  - name: EV charger
+    priority: medium
+    reason: Track installation date and cable condition
+
+maintenance_schedules:
+  smoke_alarm:
+    test:
+      interval_days: 180
+      notes: Test alarm button every 6 months
+    battery_replacement:
+      interval_days: 365
+      notes: Replace 9V battery annually
+    unit_replacement:
+      interval_days: 3650
+      notes: Replace whole unit every 10 years
+  carbon_monoxide_detector:
+    test:
+      interval_days: 180
+      notes: Test button every 6 months
+    battery_replacement:
+      interval_days: 365
+      notes: Replace battery annually
