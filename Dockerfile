@@ -15,12 +15,10 @@ RUN uv sync --frozen
 # Copy application source
 COPY . .
 
-EXPOSE 8501
+# Frontend (Next.js) on 3000, backend (FastAPI/WebSocket) on 8001
+EXPOSE 3000 8001
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/ping')"
 
-CMD ["uv", "run", "streamlit", "run", "app.py", \
-     "--server.port=8501", \
-     "--server.address=0.0.0.0", \
-     "--server.headless=true"]
+CMD ["uv", "run", "reflex", "run", "--env", "prod"]

@@ -1,4 +1,4 @@
-from schema.models import CategorySchema, ChecklistItem, MaintenanceTask
+﻿from schema.models import CategorySchema, ChecklistItem, MaintenanceTask
 
 HVAC = CategorySchema(
     category="HVAC",
@@ -14,7 +14,7 @@ HVAC = CategorySchema(
         ChecklistItem(name="Ducted heating system", priority="high", reason="Annual service critical for gas safety"),
         ChecklistItem(name="Split system air conditioner", priority="high", reason="Filter cleaning every 3 months improves efficiency"),
         ChecklistItem(name="Evaporative cooler", priority="high", reason="Needs annual service before summer"),
-        ChecklistItem(name="Exhaust fans (bathroom/kitchen)", priority="medium", reason="Reduces mould risk — clean annually"),
+        ChecklistItem(name="Exhaust fans (bathroom/kitchen)", priority="medium", reason="Reduces mould risk - clean annually"),
         ChecklistItem(name="Ceiling fans", priority="low", reason="Dust buildup reduces efficiency"),
     ],
     maintenance_schedules={

@@ -1,6 +1,6 @@
-"""Core CRUD functions for the home asset database.
+﻿"""Core CRUD functions for the home asset database.
 
-These are plain Python functions — no decorator magic. The MCP server in
+These are plain Python functions - no decorator magic. The MCP server in
 tools/mcp_server.py wraps them with the claude-agent-sdk tool decorator.
 
 All DB operations delegate to the active provider via db.get_provider().
@@ -80,7 +80,7 @@ def add_asset(
 def list_assets(category: Optional[str] = None) -> dict:
     """List all home assets, optionally filtered by category.
 
-    category: Optional filter — one of: appliances, HVAC, plumbing, electrical, exterior, vehicle, garden, plants_trees, other
+    category: Optional filter - one of: appliances, HVAC, plumbing, electrical, exterior, vehicle, garden, plants_trees, other
     """
     return get_provider().list_assets(get_current_user_id(), category)
 

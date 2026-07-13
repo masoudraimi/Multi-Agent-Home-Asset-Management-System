@@ -1,4 +1,4 @@
-"""NeonProvider: standard PostgreSQL via psycopg3.
+﻿"""NeonProvider: standard PostgreSQL via psycopg3.
 
 Works with Neon or any standard PostgreSQL database.
 Requires DATABASE_URL in the environment.
@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta
 import psycopg
 from psycopg.rows import dict_row
 
-# Idempotent DDL — every statement is guarded (IF NOT EXISTS / IF EXISTS).
+# Idempotent DDL - every statement is guarded (IF NOT EXISTS / IF EXISTS).
 # Safe to run on every startup.
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS users (
@@ -97,7 +97,7 @@ DELETE FROM assets WHERE user_id IS NULL;
 
 
 class NeonProvider:
-    """psycopg3 implementation — one thread-local connection per thread."""
+    """psycopg3 implementation - one thread-local connection per thread."""
 
     def __init__(self) -> None:
         self._local = threading.local()
@@ -433,7 +433,7 @@ class NeonProvider:
         password = os.environ.get("ADMIN_PASSWORD")
         if not email or not password:
             print(
-                "No users found and ADMIN_EMAIL/ADMIN_PASSWORD not set — "
+                "No users found and ADMIN_EMAIL/ADMIN_PASSWORD not set - "
                 "set them in .env to bootstrap the first admin account."
             )
             return

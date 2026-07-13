@@ -9,12 +9,13 @@ config = rx.Config(
     plugins=[
         RadixThemesPlugin(
             theme=rx.theme(
-                appearance="dark",
-                accent_color="violet",
-                gray_color="slate",
+                appearance="light",
+                accent_color="teal",
+                gray_color="gray",
                 radius="medium",
             )
         )
     ],
+    stylesheets=["custom.css"],
     disable_plugins=[SitemapPlugin],
 )

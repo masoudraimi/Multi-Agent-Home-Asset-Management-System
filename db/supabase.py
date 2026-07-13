@@ -1,4 +1,4 @@
-"""SupabaseProvider: database backend using the Supabase Python SDK.
+﻿"""SupabaseProvider: database backend using the Supabase Python SDK.
 
 Requires SUPABASE_URL and SUPABASE_KEY in the environment.
 For schema creation also requires SUPABASE_DB_URL or SUPABASE_DB_PASSWORD.
@@ -149,7 +149,7 @@ class SupabaseProvider:
                 + _SCHEMA_SQL
             )
         import psycopg
-        print("Schema missing — applying multi-user migration...")
+        print("Schema missing - applying multi-user migration...")
         with psycopg.connect(db_url, autocommit=True) as conn:
             with conn.cursor() as cur:
                 cur.execute(_SCHEMA_SQL)
@@ -416,7 +416,7 @@ class SupabaseProvider:
         password = os.environ.get("ADMIN_PASSWORD")
         if not email or not password:
             print(
-                "No users found and ADMIN_EMAIL/ADMIN_PASSWORD not set — "
+                "No users found and ADMIN_EMAIL/ADMIN_PASSWORD not set - "
                 "set them in .env to bootstrap the first admin account."
             )
             return

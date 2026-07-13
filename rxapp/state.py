@@ -1,4 +1,4 @@
-"""Single Reflex state for the entire Home Asset Agent app.
+"""Single Reflex state for the entire WiseWombat app.
 
 All state lives here to avoid sub-state complexity. The ContextVar
 (core/session.py) is re-applied at the start of every event handler that
@@ -82,6 +82,7 @@ class State(rx.State):
     user_role: str = ""
     is_authenticated: bool = False
     login_error: str = ""
+    active_tab: str = "chat"
 
     # ── Chat ───────────────────────────────────────────────────────────────────
     messages: list[Message] = []
@@ -163,6 +164,10 @@ class State(rx.State):
     async def require_auth(self):
         if not self.is_authenticated:
             yield rx.redirect("/login")
+
+    @rx.event
+    def set_active_tab(self, tab: str):
+        self.active_tab = tab
 
     # ── Chat event handlers ────────────────────────────────────────────────────
     @rx.event

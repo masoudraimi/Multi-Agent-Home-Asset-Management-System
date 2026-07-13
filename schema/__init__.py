@@ -1,9 +1,9 @@
-"""Single source of truth for all asset schema data.
+﻿"""Single source of truth for all asset schema data.
 
 One typed Python module per category. Each module exposes a CategorySchema
 (or PlantCategorySchema) instance validated at import time by Pydantic.
 
-Public API — consumed by agents and workflows, never changed:
+Public API - consumed by agents and workflows, never changed:
   get_questions(category)       -> list[str]
   get_checklist()               -> dict[str, list[dict]]
   get_plant_care()              -> dict[str, dict[str, dict]]
@@ -12,7 +12,7 @@ Public API — consumed by agents and workflows, never changed:
 
 from __future__ import annotations
 
-from schema.models import CategorySchema, PlantCategorySchema  # noqa: F401 — re-exported
+from schema.models import CategorySchema, PlantCategorySchema  # noqa: F401 - re-exported
 from schema.appliances import APPLIANCES
 from schema.electrical import ELECTRICAL
 from schema.exterior import EXTERIOR

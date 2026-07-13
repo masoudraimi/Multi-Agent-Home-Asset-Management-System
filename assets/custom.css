@@ -1,0 +1,157 @@
+﻿/* ══════════════════════════════════════════════════════
+   WiseWombat - Global Design System
+   Prevents Chrome Force Dark Mode from overriding
+   Radix CSS variables and component colors.
+   ══════════════════════════════════════════════════════ */
+
+/* ── 1. Force light color scheme on everything ──────── */
+html, :root, .radix-themes, .radix-themes * {
+  color-scheme: only light !important;
+  -webkit-color-scheme: light !important;
+  forced-color-adjust: none;
+}
+
+/* ── 2. Base page & typography ──────────────────────── */
+body, .radix-themes {
+  background-color: #f5f6f8;
+  color: #111827;
+}
+
+/* ── 3. All Radix text & heading ────────────────────── */
+.rt-Text,
+.rt-Heading,
+.rt-Link {
+  color: #111827;
+}
+
+/* Muted / secondary text (color_scheme="gray") */
+.rt-Text[data-accent-color="gray"],
+[data-accent-color="gray"].rt-Text {
+  color: #6b7280 !important;
+}
+
+/* ── 4. Table ────────────────────────────────────────── */
+.rt-TableRoot {
+  color: #111827;
+}
+
+.rt-TableColumnHeaderCell,
+.rt-TableColumnHeaderCell * {
+  color: #374151 !important;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.rt-TableCell,
+.rt-TableCell * {
+  color: #374151;
+}
+
+.rt-TableRow:hover {
+  background-color: #f8f9fa;
+}
+
+/* ── 5. Code blocks ──────────────────────────────────── */
+.rt-Code,
+pre, code {
+  color: #1f2937;
+  background-color: #f3f4f6;
+}
+
+/* ── 6. Badge ────────────────────────────────────────── */
+.rt-Badge[data-accent-color="gray"] {
+  background-color: #f3f4f6;
+  color: #374151;
+  border-color: #d1d5db;
+}
+
+/* ── 7. Callout ──────────────────────────────────────── */
+.rt-CalloutRoot[data-accent-color="gray"] {
+  background-color: #f9fafb;
+}
+.rt-CalloutText {
+  color: inherit;
+}
+
+/* ── 8. Inputs & selects ─────────────────────────────── */
+/*
+  Chrome Force Dark Mode overrides background-color and color on form
+  controls even when color-scheme and forced-color-adjust are set.
+  Workarounds:
+    - background-image gradient: Chrome does NOT invert gradient backgrounds,
+      only background-color. A single-stop gradient is visually identical
+      to a solid color but bypasses the dark mode algorithm.
+    - -webkit-text-fill-color: Chrome does NOT override this property.
+    - The <meta name="color-scheme" content="light only"> tag in the HTML
+      head (set in rxapp.py) is the primary fix; CSS is the fallback.
+*/
+input,
+textarea,
+.rt-TextFieldRoot,
+.rt-TextFieldInput {
+  color-scheme: light !important;
+  forced-color-adjust: none !important;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  background-color: #ffffff !important;
+  background-image: linear-gradient(#ffffff, #ffffff) !important;
+}
+
+input::placeholder,
+textarea::placeholder,
+.rt-TextFieldInput::placeholder {
+  color: #9ca3af !important;
+  -webkit-text-fill-color: #9ca3af !important;
+  opacity: 1 !important;
+}
+
+select,
+.rt-SelectTrigger {
+  color-scheme: light !important;
+  forced-color-adjust: none !important;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  background-color: #ffffff !important;
+  background-image: linear-gradient(#ffffff, #ffffff) !important;
+}
+
+.rt-SelectContent,
+.rt-SelectItem {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+}
+
+/* ── 9. Separator ────────────────────────────────────── */
+.rt-Separator {
+  background-color: #e4e5e7 !important;
+}
+
+/* ── 10. Card ────────────────────────────────────────── */
+.rt-Card {
+  background-color: #ffffff;
+  color: #111827;
+}
+
+/* ── 11. Slider ──────────────────────────────────────── */
+.rt-SliderTrack {
+  background-color: #e4e5e7;
+}
+
+/* ── 12. Avatar fallback text ────────────────────────── */
+.rt-AvatarFallback {
+  color: #ffffff;
+}
+
+/* ── 13. Scroll area ─────────────────────────────────── */
+.rt-ScrollAreaScrollbar {
+  background-color: transparent;
+}
+.rt-ScrollAreaThumb {
+  background-color: #d1d5db;
+}
+
+/* ── 14. Tabs content ────────────────────────────────── */
+.rt-TabsContent {
+  color: #111827;
+}
