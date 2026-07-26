@@ -195,6 +195,24 @@ def update_asset(
     return get_provider().update_asset(get_current_user_id(), asset_id, updates)
 
 
+def delete_asset(asset_id: int) -> dict:
+    """Permanently delete an asset and its maintenance history.
+
+    Should only be called after the user has confirmed via the approval card
+    published by review_delete_asset. The maintenance_tasks table has an
+    ON DELETE CASCADE foreign key, so history cleans up automatically.
+
+    asset_id: ID of the asset to delete
+    """
+    try:
+        result = get_provider().delete_asset(get_current_user_id(), asset_id)
+        audit_log("asset_deleted", {"asset_id": asset_id, "result": result})
+        return result
+    except Exception as exc:
+        audit_log("asset_delete_failed", {"asset_id": asset_id, "error": str(exc)})
+        raise
+
+
 # ---------------------------------------------------------------------------
 # Tools delegating to workflows
 # ---------------------------------------------------------------------------
@@ -223,6 +241,19 @@ def review_asset_draft(draft_json: str) -> dict:
     """
     from workflows.onboarding import review_asset_draft as _fn
     return _fn(draft_json)
+
+
+def review_delete_asset(asset_id: int) -> dict:
+    """Fetch an asset's details and request user approval before deletion.
+
+    Renders an approval card in the UI showing what will be deleted (asset
+    fields + count of maintenance records that will cascade). delete_asset
+    must not be called until the user confirms via that card.
+
+    asset_id: ID of the asset the user wants to delete
+    """
+    from workflows.deletion import review_delete_asset as _fn
+    return _fn(asset_id)
 
 
 def get_plant_care_schedule(asset_id: int) -> dict:

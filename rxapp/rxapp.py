@@ -22,6 +22,7 @@ from rxapp.state import State  # noqa: E402
 app = rx.App(
     head_components=[
         rx.el.meta(name="color-scheme", content="light only"),
+        rx.el.link(rel="stylesheet", href="/custom.css"),
         rx.el.style(f"""
             /* ── Inputs ── */
             .rt-TextFieldInput {{
@@ -86,6 +87,22 @@ app = rx.App(
             .rt-CalloutRoot[data-accent-color="gray"] svg {{
                 color: {styles.TEXT_SECONDARY} !important;
                 stroke: {styles.TEXT_SECONDARY} !important;
+            }}
+
+            /* ── Inline code (soft teal default) ── */
+            .rt-Code:where(.rt-variant-soft) {{
+                color: {styles.TEAL_700} !important;
+                background-color: {styles.TEAL_100} !important;
+            }}
+
+            /* ── Soft-variant teal: darken text to prevent low-contrast rendering ── */
+            .rt-Badge[data-accent-color="teal"]:where(.rt-variant-soft),
+            .rt-Button[data-accent-color="teal"]:where(.rt-variant-soft),
+            .rt-IconButton[data-accent-color="teal"]:where(.rt-variant-soft) {{
+                color: {styles.TEAL_700} !important;
+            }}
+            .rt-AvatarFallback[data-accent-color="teal"] {{
+                color: {styles.TEAL_700} !important;
             }}
         """),
     ],
