@@ -382,9 +382,9 @@ class State(rx.State):
         self.upcoming_count = upcoming
 
     @rx.event
-    def set_schedule_days(self, days: list[int]):
+    def set_schedule_days(self, days: list[float]):
         if days:
-            self.schedule_days = days[0]
+            self.schedule_days = int(days[0])
 
     # ── Admin event handlers ───────────────────────────────────────────────────
     @rx.event
