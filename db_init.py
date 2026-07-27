@@ -1,6 +1,6 @@
-"""First-run database bootstrap.
+﻿"""First-run database bootstrap.
 
-Schema (tables) must already exist — create them once via the Supabase SQL Editor
+Schema (tables) must already exist, create them once via the Supabase SQL Editor
 (see README). This module is multi-user: it no longer seeds sample assets. Each
 user starts with an empty inventory. On first run it bootstraps an admin account
 from the ADMIN_EMAIL / ADMIN_PASSWORD env vars.

@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/python-%3E%3D3.13-3776AB?logo=python&logoColor=white)](https://python.org)
 [![uv](https://img.shields.io/badge/uv-package%20manager-DE5FE9)](https://docs.astral.sh/uv)
-[![Streamlit](https://img.shields.io/badge/Streamlit-%3E%3D1.58-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io)
+[![Reflex](https://img.shields.io/badge/Reflex-%3E%3D0.6-5646ED?logo=reflex&logoColor=white)](https://reflex.dev)
 [![Claude](https://img.shields.io/badge/Claude-Sonnet%204.6%20%2F%20Haiku%204.5-D97757)](https://anthropic.com)
 [![OpenRouter](https://img.shields.io/badge/OpenRouter-compatible-74AA9C)](https://openrouter.ai)
 [![MCP](https://img.shields.io/badge/MCP-11%20tools-6E40C9)](https://modelcontextprotocol.io)
@@ -11,14 +11,13 @@
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-tracing-425CC7?logo=opentelemetry&logoColor=white)](https://opentelemetry.io)
 [![pytest](https://img.shields.io/badge/pytest-%3E%3D9.0-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org)
 
-A conversational AI agent for managing home assets and maintenance. Track appliances, HVAC, plumbing, vehicles, plants, and more — then ask plain-language questions about warranties, service history, upcoming tasks, and spend analytics.
+A conversational AI agent for managing home assets and maintenance. Track appliances, HVAC, plumbing, vehicles, plants, and more, then ask plain-language questions about warranties, service history, upcoming tasks, and spend analytics.
 
 Built as both a functional personal tool and a portfolio demonstration of **multi-agent orchestration**, **agentic tool use**, **LLM-as-judge workflows**, and **provider-agnostic design** with the Claude Agent SDK and OpenRouter.
 
-
 ## Demo
 
-```
+```text
 You:   Add my dishwasher.
 Agent: [calls get_onboarding_questions]
        Let's get your dishwasher set up. What brand and model is it?
@@ -34,11 +33,10 @@ Agent: [calls add_asset]
        Saved. Also, your HVAC filter replacement is 12 days overdue.
 ```
 
-
 ## Architecture
 
-```
-Streamlit UI
+```text
+Reflex UI
       │
       ▼
 OrchestratorAgent          intent classification (Claude Haiku)
@@ -56,7 +54,7 @@ Shared infrastructure (core/)
   ├── AgentRegistry      loads agent.yaml configs at startup
   ├── ConversationContext sliding-window memory + working memory hints
   ├── Guardrails         input injection detection + output sanitisation
-  ├── EventBus           HumanApprovalRequested → Streamlit confirmation cards
+  ├── EventBus           HumanApprovalRequested → Reflex UI confirmation cards
   └── OTel tracing       per-turn spans with token/latency/tool-call attributes
 
 Tools (tools/mcp_server.py)
@@ -67,14 +65,12 @@ Tools (tools/mcp_server.py)
 ### Agent models
 
 | Agent | Model | Role |
-|---|---|---|
+| --- | --- | --- |
 | Orchestrator | Claude Haiku | Intent classification and routing |
 | Asset | Claude Sonnet | Inventory management and onboarding |
 | Maintenance | Claude Sonnet | Scheduling and plant care |
 | Insights | Claude Sonnet | Spend analytics and warranty alerts |
 | Onboarding judge | Claude Haiku | LLM-as-judge completeness review |
-
-
 
 ## Provider Switching
 
@@ -87,7 +83,7 @@ LLM_PROVIDER=openrouter
 ```
 
 | Provider | Env var required | How it works |
-|---|---|---|
+| --- | --- | --- |
 | `claude_sdk` | `ANTHROPIC_API_KEY` | `claude_agent_sdk.query()`: runs the `claude` binary via the Python SDK with an in-process MCP server |
 | `claude_cli` | authenticated `claude` CLI | spawns `claude --output-format stream-json` as a subprocess; tools are served by a separate stdio MCP process (`tools/stdio_server.py`) |
 | `openrouter` | `OPENROUTER_API_KEY` | OpenAI-compatible HTTP API; agent loop and tool dispatch are handled entirely in-process |
@@ -107,23 +103,19 @@ openrouter     Python → openai.AsyncOpenAI → https://openrouter.ai/api/v1
 
 Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. The `agent.yaml` files always store Anthropic-native IDs; `resolve_model()` translates to OpenRouter's namespace when needed.
 
-
-
 ## Tech Stack
 
 | Layer | Technology |
-|---|---|
+| --- | --- |
 | LLM | Claude Sonnet 4.6 / Haiku 4.5 |
 | Agent framework (default) | Claude Agent SDK + in-process MCP |
 | Agent framework (alternate) | OpenAI SDK → OpenRouter |
 | Database | PostgreSQL (Neon by default; Supabase supported) |
 | Tool protocol | MCP (Model Context Protocol) |
 | Data validation | Pydantic v2 |
-| UI | Streamlit |
+| UI | Reflex |
 | Observability | OpenTelemetry |
 | Dependency management | uv |
-
-
 
 ## Key Patterns Demonstrated
 
@@ -131,7 +123,7 @@ Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. T
 
 **LLM-as-judge**: before saving a new asset, `review_asset_draft` calls Haiku to score completeness, flag suspicious values, and surface missing fields. The agent only calls `add_asset` after the user confirms.
 
-**Human-in-the-loop**: `HumanApprovalRequested` events flow through the `EventBus` to render a confirmation card in the Streamlit UI before any write is committed.
+**Human-in-the-loop**: `HumanApprovalRequested` events flow through the `EventBus` to render a confirmation card in the Reflex UI before any write is committed.
 
 **Working memory**: `ConversationContext` tracks asset names and IDs seen in tool results and injects them as a hint on subsequent turns, reducing redundant lookups.
 
@@ -139,15 +131,13 @@ Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. T
 
 **MCP tools**: all 11 tools are defined once in `tools/mcp_server.py` with Pydantic schemas. The same definitions generate both the in-process MCP server (Claude SDK path) and OpenAI function-calling schemas (OpenRouter path).
 
-
-
 ## Getting Started
 
 ### Prerequisites
 
 - Python 3.13+
 - `uv` package manager
-- A PostgreSQL database — [Neon](https://neon.tech) (default, free tier) or [Supabase](https://supabase.com)
+- A PostgreSQL database: [Neon](https://neon.tech) (default, free tier) or [Supabase](https://supabase.com)
 - LLM provider (pick one):
   - **Claude CLI** (default): `claude` CLI installed and authenticated (`claude login`)
   - **Claude SDK**: `ANTHROPIC_API_KEY` in `.env`
@@ -155,7 +145,7 @@ Model IDs are resolved per-provider in `core/models.py` via `resolve_model()`. T
 
 ### 1. Set up the database
 
-The app applies the schema automatically on first launch — no manual SQL required.
+The app applies the schema automatically on first launch, no manual SQL required.
 
 **Neon (default):**
 
@@ -169,7 +159,7 @@ The app applies the schema automatically on first launch — no manual SQL requi
 2. Set `DB_PROVIDER=supabase`, `SUPABASE_URL`, and `SUPABASE_KEY` in `.env`
 3. Optionally set `SUPABASE_DB_URL` or `SUPABASE_DB_PASSWORD` for automatic schema creation; otherwise paste the schema into the Supabase SQL editor manually
 
-> **Multi-user:** Data is isolated per user at the application layer — every query
+> **Multi-user:** Data is isolated per user at the application layer, every query
 > filters by the signed-in user's ID. Accounts are created only by an admin via
 > the in-app **Admin** tab; there is no public sign-up. On first run the app
 > bootstraps an admin account from `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
@@ -203,7 +193,7 @@ ADMIN_EMAIL=you@example.com
 ADMIN_PASSWORD=<choose-a-strong-password>
 
 # ── LLM provider ──────────────────────────────────────────────────────────────
-# LLM_PROVIDER=claude_cli    # default — no API key needed if claude CLI is authenticated
+# LLM_PROVIDER=claude_cli    # default: no API key needed if claude CLI is authenticated
 # LLM_PROVIDER=claude_sdk
 # ANTHROPIC_API_KEY=sk-ant-...
 # LLM_PROVIDER=openrouter
@@ -215,15 +205,15 @@ ADMIN_PASSWORD=<choose-a-strong-password>
 ```
 
 > **Switching databases:** change `DB_PROVIDER` and supply the matching credentials.
-> The schema is applied automatically either way — no manual SQL needed.
+> The schema is applied automatically either way: no manual SQL needed.
 
 ### 3. Run the app
 
 ```bash
-uv run streamlit run app.py
+uv run reflex run
 ```
 
-On first launch, the app automatically seeds the database with 13 sample assets and 19 maintenance records.
+On first launch, the app automatically seeds the database with 13 sample assets and 19 maintenance records. The UI is served at `http://localhost:3000`.
 
 ### Run the eval suite
 
@@ -231,35 +221,28 @@ On first launch, the app automatically seeds the database with 13 sample assets 
 uv run python eval/run_eval.py
 ```
 
-Benchmarks cover the orchestrator, asset agent, and maintenance agent across simple / moderate / complex scenarios. Results are saved to `eval/results/` and surfaced in the Observability tab.
+Benchmarks cover the orchestrator, asset agent, and maintenance agent across simple / moderate / complex scenarios. Results are saved to `eval/results/`.
 
+## Deploy
 
-
-## Deploy to Streamlit Community Cloud
+**Option 1 – Reflex Cloud (easiest):**
 
 1. Push your repo to GitHub
-2. Go to [share.streamlit.io](https://share.streamlit.io) → **New app** → connect your repo
-3. Set the entry point to `app.py`
-4. Under **Secrets**, add your database and LLM credentials:
+2. Go to [cloud.reflex.dev](https://cloud.reflex.dev) and connect your repo
+3. Add your environment variables in the project settings
 
-```toml
-# Neon (default)
-DB_PROVIDER = "neon"
-DATABASE_URL = "postgresql://user:password@host/dbname?sslmode=require"
+**Option 2 – Self-hosted (Docker):**
 
-# Or Supabase
-# DB_PROVIDER = "supabase"
-# SUPABASE_URL = "https://<ref>.supabase.co"
-# SUPABASE_KEY = "<service-role-key>"
-
-ADMIN_EMAIL = "you@example.com"
-ADMIN_PASSWORD = "..."
-ANTHROPIC_API_KEY = "sk-ant-..."
+```bash
+docker build -t home-asset-agent .
+docker run -p 3000:3000 -p 8001:8001 \
+  -e DATABASE_URL="postgresql://..." \
+  -e ADMIN_EMAIL="you@example.com" \
+  -e ADMIN_PASSWORD="..." \
+  home-asset-agent
 ```
 
-The schema is applied automatically on first launch. Data persists in your database across deployments.
-
-
+Set all required environment variables (see `.env` template above).
 
 ## Database Schema
 
@@ -273,19 +256,24 @@ The schema is applied automatically on first launch. Data persists in your datab
 
 Asset categories: `appliances`, `HVAC`, `plumbing`, `electrical`, `exterior`, `vehicle`, `garden`, `plants_trees`, `other`
 
-
-
 ## Project Structure
 
-```
+```text
 home-asset-agent/
+├── rxapp/
+│   ├── rxapp.py           Reflex app entry point + inline CSS overrides
+│   ├── state.py           Reflex state (auth, chat, assets, schedule, admin)
+│   ├── index_page.py      Main dashboard (chat, assets, schedule, admin tabs)
+│   ├── login_page.py      Login page
+│   └── styles.py          Design tokens (colours, badge styles, shadows)
+├── rxconfig.py            Reflex configuration (ports, theme, plugins)
 ├── agents/
 │   ├── orchestrator/
 │   │   ├── agent.py / agent.yaml / prompts/system.md
 │   │   └── workflows/routing.py       intent classification
 │   ├── asset/
 │   │   ├── agent.py / agent.yaml / prompts/system.md
-│   │   └── workflows/onboarding.py    LLM-as-judge asset review
+│   │   ├── workflows/onboarding.py    LLM-as-judge asset review
 │   │   └── workflows/suggestions.py   missing asset gap analysis
 │   ├── maintenance/
 │   │   ├── agent.py / agent.yaml / prompts/system.md
@@ -322,7 +310,6 @@ home-asset-agent/
 │   ├── db.py              CRUD tool implementations (provider-agnostic)
 │   ├── mcp_server.py      MCP server + OpenAI tool schemas + dispatcher
 │   └── stdio_server.py    stdio MCP server for claude_cli provider path
-├── components/            Streamlit tab components
 ├── knowledge/
 │   ├── rag/indexer.py     RAG indexer for plant care + asset checklists
 │   ├── prompts/library.yaml  reusable prompt templates
@@ -333,6 +320,5 @@ home-asset-agent/
 ├── agent/                 backward-compat shims (runner.py, context.py)
 ├── workflows/             backward-compat shims → agents/*/workflows/
 ├── skills/                backward-compat shims → agents/*/workflows/
-├── app.py                 Streamlit entry point
 └── db_init.py             schema bootstrap + admin seed (runs on first launch)
 ```

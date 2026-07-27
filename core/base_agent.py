@@ -204,9 +204,17 @@ class BaseAgent:
             }
         }
 
+        # Non-interactive sessions can't answer permission prompts, and
+        # bypassPermissions is often blocked by org policy. Pre-authorise
+        # the app's own MCP server via an inline settings file instead.
+        cli_settings = {"permissions": {"allow": ["mcp__home-assets"]}}
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(mcp_config, f)
             config_path = f.name
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(cli_settings, f)
+            settings_path = f.name
 
         try:
             cmd = [
@@ -214,9 +222,11 @@ class BaseAgent:
                 "--model", self.config.model,
                 "--system-prompt", self._system_prompt + context.working_memory_hint,
                 "--mcp-config", config_path,
+                "--settings", settings_path,
                 "--disallowedTools", "Bash,Write,Edit,MultiEdit,NotebookEdit,Read",
                 "--max-turns", str(self.config.max_turns),
                 "--output-format", "stream-json",
+                "--verbose",
                 "-p", context.format_prompt(user_message),
             ]
 
@@ -295,6 +305,7 @@ class BaseAgent:
 
         finally:
             os.unlink(config_path)
+            os.unlink(settings_path)
 
         return final_text, total_tokens, tool_call_count
 

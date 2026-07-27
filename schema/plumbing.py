@@ -1,4 +1,4 @@
-from schema.models import CategorySchema, ChecklistItem, MaintenanceTask
+﻿from schema.models import CategorySchema, ChecklistItem, MaintenanceTask
 
 PLUMBING = CategorySchema(
     category="plumbing",
@@ -12,7 +12,7 @@ PLUMBING = CategorySchema(
     ],
     checklist=[
         ChecklistItem(name="Hot water system", priority="high", reason="Anode replacement every 5 years prevents tank failure"),
-        ChecklistItem(name="Sump pump", priority="high", reason="Failure during a storm causes flooding — test annually"),
+        ChecklistItem(name="Sump pump", priority="high", reason="Failure during a storm causes flooding - test annually"),
         ChecklistItem(name="Irrigation / watering system", priority="medium", reason="Track last service and winterisation"),
         ChecklistItem(name="External tap / hose reel", priority="low", reason="Track condition"),
     ],

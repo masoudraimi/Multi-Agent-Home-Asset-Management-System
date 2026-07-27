@@ -87,6 +87,14 @@ class UpdateAssetInput(BaseModel):
     next_service_km: Optional[int] = None
 
 
+class DeleteAssetInput(BaseModel):
+    asset_id: int
+
+
+class ReviewDeleteAssetInput(BaseModel):
+    asset_id: int
+
+
 class GetOnboardingQuestionsInput(BaseModel):
     asset_type: str
 
@@ -177,6 +185,29 @@ async def _update_asset(params: UpdateAssetInput) -> dict:
 
 
 @tool(
+    name="review_delete_asset",
+    description="Preview an asset deletion and request user approval. Call this "
+                "BEFORE delete_asset. Fetches the asset and its maintenance record "
+                "count, then renders an approval card in the UI. Only call "
+                "delete_asset after the user confirms via that card.",
+    input_schema=ReviewDeleteAssetInput,
+)
+async def _review_delete_asset(params: ReviewDeleteAssetInput) -> dict:
+    return db.review_delete_asset(asset_id=params.asset_id)
+
+
+@tool(
+    name="delete_asset",
+    description="Permanently delete an asset and its maintenance history. "
+                "Only call this AFTER the user has confirmed via the approval card "
+                "produced by review_delete_asset. Never call directly.",
+    input_schema=DeleteAssetInput,
+)
+async def _delete_asset(params: DeleteAssetInput) -> dict:
+    return db.delete_asset(asset_id=params.asset_id)
+
+
+@tool(
     name="get_onboarding_questions",
     description="Get type-specific guided questions for onboarding a new asset. "
                 "Call this at the start of any 'add new asset' workflow.",
@@ -254,6 +285,15 @@ _OPENROUTER_TOOL_DEFS: list[tuple[str, str, type[BaseModel]]] = [
     ("update_asset",
      "Update one or more fields on an existing asset.",
      UpdateAssetInput),
+    ("review_delete_asset",
+     "Preview an asset deletion and request user approval. Call this BEFORE "
+     "delete_asset. Renders an approval card showing the asset and how many "
+     "maintenance records will cascade-delete.",
+     ReviewDeleteAssetInput),
+    ("delete_asset",
+     "Permanently delete an asset and its maintenance history. Only call AFTER "
+     "the user has confirmed via the approval card produced by review_delete_asset.",
+     DeleteAssetInput),
     ("get_onboarding_questions",
      "Get type-specific guided questions for onboarding a new asset. "
      "Call this at the start of any 'add new asset' workflow.",
@@ -311,6 +351,10 @@ def dispatch_tool(name: str, args: dict) -> dict:
             return db.get_asset_history(asset_id=params.asset_id)
         case "update_asset":
             return db.update_asset(**params.model_dump(exclude_none=True))
+        case "review_delete_asset":
+            return db.review_delete_asset(asset_id=params.asset_id)
+        case "delete_asset":
+            return db.delete_asset(asset_id=params.asset_id)
         case "get_onboarding_questions":
             return db.get_onboarding_questions(asset_type=params.asset_type)
         case "review_asset_draft":
@@ -339,6 +383,8 @@ def build_sdk_server():
         _get_upcoming_maintenance,
         _get_asset_history,
         _update_asset,
+        _review_delete_asset,
+        _delete_asset,
         _get_onboarding_questions,
         _review_asset_draft,
         _get_plant_care_schedule,

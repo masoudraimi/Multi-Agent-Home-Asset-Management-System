@@ -1,4 +1,4 @@
-"""Skill B: Plants and trees — species-aware care schedule generation."""
+﻿"""Skill B: Plants and trees - species-aware care schedule generation."""
 
 from workflows.plant_care import get_plant_care_schedule
 

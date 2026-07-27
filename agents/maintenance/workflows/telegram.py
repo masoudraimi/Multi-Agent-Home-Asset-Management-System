@@ -57,7 +57,7 @@ def build_monthly_digest() -> str:
     if not overdue and not due_week and not due_month:
         lines.append("Nothing due this month. Great job staying on top of things!")
 
-    lines.append("Sent by Home Asset Agent")
+    lines.append("Sent by WiseWombat")
     return "\n".join(lines)
 
 

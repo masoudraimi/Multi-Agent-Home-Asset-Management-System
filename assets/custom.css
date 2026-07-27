@@ -1,0 +1,258 @@
+﻿/* ══════════════════════════════════════════════════════
+   WiseWombat - Global Design System
+   Prevents Chrome Force Dark Mode from overriding
+   Radix CSS variables and component colors.
+   ══════════════════════════════════════════════════════ */
+
+/* ── 1. Force light color scheme on everything ──────── */
+html, :root, .radix-themes, .radix-themes * {
+  color-scheme: only light !important;
+  -webkit-color-scheme: light !important;
+  forced-color-adjust: none;
+}
+
+/* ── 2. Base page & typography ──────────────────────── */
+body, .radix-themes {
+  background-color: #f5f6f8;
+  color: #111827;
+}
+
+/* ── 3. All Radix text & heading ────────────────────── */
+.rt-Text,
+.rt-Heading,
+.rt-Link {
+  color: #111827;
+}
+
+/* Any raw HTML text inside a Radix Box (headings, table cells, list items
+   from react-markdown, etc.) defaults to black. Inline-styled elements
+   (e.g. rx.text with an explicit color prop) still win via cascade. */
+.rt-Box, .rt-Box * {
+  color: #000000;
+}
+
+/* Muted / secondary text (color_scheme="gray") */
+.rt-Text[data-accent-color="gray"],
+[data-accent-color="gray"].rt-Text {
+  color: #6b7280 !important;
+}
+
+/* ── 4. Table ────────────────────────────────────────── */
+.rt-TableRoot {
+  color: #111827;
+}
+
+.rt-TableColumnHeaderCell,
+.rt-TableColumnHeaderCell * {
+  color: #374151 !important;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.rt-TableCell,
+.rt-TableCell * {
+  color: #374151;
+}
+
+.rt-TableRow:hover {
+  background-color: #f8f9fa;
+}
+
+/* ── 5. Code blocks ──────────────────────────────────── */
+.rt-Code,
+pre, code {
+  color: #1f2937;
+  background-color: #f3f4f6;
+}
+
+/* ── ScrollArea viewport children: remove Reflex's fit-content override ─ */
+/* Reflex injects `.rt-ScrollAreaViewport > * { width: fit-content }` which
+   causes any scroll area's child to size to its content, breaking all
+   percentage-based width constraints in the subtree. Scoped to the outer
+   chat message scroll area only; nested horizontal scroll areas around
+   code blocks should keep their default behavior. */
+.messages-scroll .rt-ScrollAreaViewport > * {
+  display: block !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+
+/* Code blocks: prevent horizontal overflow.
+   The syntax highlighter injects white-space:pre as an inline style.
+   CSS !important in a stylesheet beats inline-style normal declarations
+   (author !important > inline normal in the cascade), so this wins. */
+pre {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+}
+
+/* ── Chat width containment ─────────────────────────── */
+/* Every flex descendant in the chat tree must be able to shrink below
+   its intrinsic content width. This defeats the default `min-width: auto`
+   on flex items, which is the root cause of horizontal overflow in the
+   assistant bubble when a tool result contains a long JSON string or
+   the markdown response contains an unbroken token. */
+.assistant-bubble,
+.tool-call-card,
+.tool-call-result,
+.chat-markdown {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Long unbroken tokens in markdown paragraphs, links, inline code, and
+   descendants must be allowed to break anywhere. */
+.chat-markdown,
+.chat-markdown *,
+.chat-markdown-p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+/* Code blocks inside tool call cards: the outer `pre` rule handles the
+   `<pre>` element itself; this catches the wrapper divs the syntax
+   highlighter injects around it. */
+.tool-call-card .rt-ScrollAreaViewport,
+.tool-call-card .rt-ScrollAreaViewport > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Markdown-rendered tables (react-markdown + remark-gfm output plain
+   <table>/<thead>/<tbody>/<tr>/<th>/<td> with no styling of their own). */
+.chat-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  font-size: 13px;
+  color: #111827;
+  border: 1px solid #e4e5e7;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.chat-markdown thead {
+  background-color: #f9fafb;
+}
+.chat-markdown th {
+  text-align: left;
+  padding: 8px 12px;
+  font-weight: 600;
+  color: #374151;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid #e4e5e7;
+}
+.chat-markdown td {
+  padding: 6px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #111827;
+  vertical-align: top;
+}
+.chat-markdown tbody tr:last-child td {
+  border-bottom: none;
+}
+.chat-markdown tbody tr:nth-child(even) {
+  background-color: #fafbfc;
+}
+
+/* ── 6. Badge ────────────────────────────────────────── */
+.rt-Badge[data-accent-color="gray"] {
+  background-color: #f3f4f6;
+  color: #374151;
+  border-color: #d1d5db;
+}
+
+/* ── 7. Callout ──────────────────────────────────────── */
+.rt-CalloutRoot[data-accent-color="gray"] {
+  background-color: #f9fafb;
+}
+.rt-CalloutText {
+  color: inherit;
+}
+
+/* ── 8. Inputs & selects ─────────────────────────────── */
+/*
+  Chrome Force Dark Mode overrides background-color and color on form
+  controls even when color-scheme and forced-color-adjust are set.
+  Workarounds:
+    - background-image gradient: Chrome does NOT invert gradient backgrounds,
+      only background-color. A single-stop gradient is visually identical
+      to a solid color but bypasses the dark mode algorithm.
+    - -webkit-text-fill-color: Chrome does NOT override this property.
+    - The <meta name="color-scheme" content="light only"> tag in the HTML
+      head (set in rxapp.py) is the primary fix; CSS is the fallback.
+*/
+input,
+textarea,
+.rt-TextFieldRoot,
+.rt-TextFieldInput {
+  color-scheme: light !important;
+  forced-color-adjust: none !important;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  background-color: #ffffff !important;
+  background-image: linear-gradient(#ffffff, #ffffff) !important;
+}
+
+input::placeholder,
+textarea::placeholder,
+.rt-TextFieldInput::placeholder {
+  color: #9ca3af !important;
+  -webkit-text-fill-color: #9ca3af !important;
+  opacity: 1 !important;
+}
+
+select,
+.rt-SelectTrigger {
+  color-scheme: light !important;
+  forced-color-adjust: none !important;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  background-color: #ffffff !important;
+  background-image: linear-gradient(#ffffff, #ffffff) !important;
+}
+
+.rt-SelectContent,
+.rt-SelectItem {
+  color: #111827 !important;
+  background-color: #ffffff !important;
+}
+
+/* ── 9. Separator ────────────────────────────────────── */
+.rt-Separator {
+  background-color: #e4e5e7 !important;
+}
+
+/* ── 10. Card ────────────────────────────────────────── */
+.rt-Card {
+  background-color: #ffffff;
+  color: #111827;
+}
+
+/* ── 11. Slider ──────────────────────────────────────── */
+.rt-SliderTrack {
+  background-color: #e4e5e7;
+}
+
+/* ── 12. Avatar fallback text ────────────────────────── */
+.rt-AvatarFallback {
+  color: #ffffff;
+}
+
+/* ── 13. Scroll area ─────────────────────────────────── */
+.rt-ScrollAreaScrollbar {
+  background-color: transparent;
+}
+.rt-ScrollAreaThumb {
+  background-color: #d1d5db;
+}
+
+/* ── 14. Tabs content ────────────────────────────────── */
+.rt-TabsContent {
+  color: #111827;
+}

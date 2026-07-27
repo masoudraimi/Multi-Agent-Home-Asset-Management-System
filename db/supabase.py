@@ -1,4 +1,4 @@
-"""SupabaseProvider: database backend using the Supabase Python SDK.
+﻿"""SupabaseProvider: database backend using the Supabase Python SDK.
 
 Requires SUPABASE_URL and SUPABASE_KEY in the environment.
 For schema creation also requires SUPABASE_DB_URL or SUPABASE_DB_PASSWORD.
@@ -149,7 +149,7 @@ class SupabaseProvider:
                 + _SCHEMA_SQL
             )
         import psycopg
-        print("Schema missing — applying multi-user migration...")
+        print("Schema missing - applying multi-user migration...")
         with psycopg.connect(db_url, autocommit=True) as conn:
             with conn.cursor() as cur:
                 cur.execute(_SCHEMA_SQL)
@@ -320,6 +320,17 @@ class SupabaseProvider:
         client.table("assets").update(updates).eq("id", asset_id).eq("user_id", user_id).execute()
         return {"status": "updated", "asset_id": asset_id, "fields_updated": list(updates.keys())}
 
+    def delete_asset(self, user_id: str, asset_id: int) -> dict:
+        client = self._get_client()
+        rows = (
+            client.table("assets").select("id, name")
+            .eq("id", asset_id).eq("user_id", user_id).execute().data
+        )
+        if not rows:
+            return {"status": "error", "message": f"No asset found with id {asset_id}"}
+        client.table("assets").delete().eq("id", asset_id).eq("user_id", user_id).execute()
+        return {"status": "deleted", "asset_id": rows[0]["id"], "name": rows[0]["name"]}
+
     def get_expiring_warranties(self, user_id: str, days_ahead: int = 90) -> dict:
         today = date.today()
         cutoff = (today + timedelta(days=days_ahead)).isoformat()
@@ -416,7 +427,7 @@ class SupabaseProvider:
         password = os.environ.get("ADMIN_PASSWORD")
         if not email or not password:
             print(
-                "No users found and ADMIN_EMAIL/ADMIN_PASSWORD not set — "
+                "No users found and ADMIN_EMAIL/ADMIN_PASSWORD not set - "
                 "set them in .env to bootstrap the first admin account."
             )
             return

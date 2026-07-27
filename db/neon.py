@@ -1,4 +1,4 @@
-"""NeonProvider: standard PostgreSQL via psycopg3.
+﻿"""NeonProvider: standard PostgreSQL via psycopg3.
 
 Works with Neon or any standard PostgreSQL database.
 Requires DATABASE_URL in the environment.
@@ -8,11 +8,32 @@ from __future__ import annotations
 import os
 import threading
 from datetime import date, datetime, timedelta
+from decimal import Decimal
+from uuid import UUID
 
 import psycopg
 from psycopg.rows import dict_row
 
-# Idempotent DDL — every statement is guarded (IF NOT EXISTS / IF EXISTS).
+
+def _serialize_row(row: dict) -> dict:
+    """Return a copy of `row` with UUID/date/datetime/Decimal values coerced
+    to JSON-serializable types. Tool results are round-tripped through
+    json.dumps by the agent SDK, which raises TypeError on these psycopg
+    return types otherwise (e.g. UUID user_id in SELECT * FROM assets).
+    """
+    out = {}
+    for k, v in row.items():
+        if isinstance(v, UUID):
+            out[k] = str(v)
+        elif isinstance(v, (date, datetime)):
+            out[k] = v.isoformat()
+        elif isinstance(v, Decimal):
+            out[k] = float(v)
+        else:
+            out[k] = v
+    return out
+
+# Idempotent DDL - every statement is guarded (IF NOT EXISTS / IF EXISTS).
 # Safe to run on every startup.
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS users (
@@ -97,18 +118,34 @@ DELETE FROM assets WHERE user_id IS NULL;
 
 
 class NeonProvider:
-    """psycopg3 implementation — one thread-local connection per thread."""
+    """psycopg3 implementation - one thread-local connection per thread."""
 
     def __init__(self) -> None:
         self._local = threading.local()
 
+    def _connect(self) -> psycopg.Connection:
+        url = os.environ.get("DATABASE_URL")
+        if not url:
+            raise RuntimeError("DATABASE_URL must be set in .env")
+        return psycopg.connect(url, row_factory=dict_row, autocommit=True)
+
     def _conn(self) -> psycopg.Connection:
+        # Neon serverless auto-suspends idle compute and severs the socket
+        # from the *server* side. psycopg's `.closed` only reflects local
+        # state, so it still reports False for a dead-remote connection.
+        # Cheap SELECT 1 ping catches this before the real query fails.
         conn = getattr(self._local, "conn", None)
-        if conn is None or conn.closed:
-            url = os.environ.get("DATABASE_URL")
-            if not url:
-                raise RuntimeError("DATABASE_URL must be set in .env")
-            self._local.conn = psycopg.connect(url, row_factory=dict_row, autocommit=True)
+        if conn is not None and not conn.closed:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                return conn
+            except (psycopg.OperationalError, psycopg.InterfaceError):
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        self._local.conn = self._connect()
         return self._local.conn
 
     # -- Schema --
@@ -179,7 +216,7 @@ class NeonProvider:
                     "SELECT * FROM assets WHERE user_id=%s ORDER BY category, name",
                     [user_id],
                 )
-            rows = [dict(r) for r in cur.fetchall()]
+            rows = [_serialize_row(dict(r)) for r in cur.fetchall()]
         return {"count": len(rows), "assets": rows}
 
     def search_assets(self, user_id: str, query: str) -> dict:
@@ -195,7 +232,7 @@ class NeonProvider:
                 """,
                 [user_id, p, p, p, p, p],
             )
-            rows = [dict(r) for r in cur.fetchall()]
+            rows = [_serialize_row(dict(r)) for r in cur.fetchall()]
         return {"count": len(rows), "assets": rows}
 
     def log_maintenance(
@@ -259,7 +296,7 @@ class NeonProvider:
                 """,
                 [user_id, cutoff],
             )
-            rows = [dict(r) for r in cur.fetchall()]
+            rows = [_serialize_row(dict(r)) for r in cur.fetchall()]
         tasks = []
         for row in rows:
             delta = (date.fromisoformat(row["next_due_date"]) - today).days
@@ -293,10 +330,10 @@ class NeonProvider:
                 """,
                 [asset_id, user_id],
             )
-            history = [dict(r) for r in cur.fetchall()]
+            history = [_serialize_row(dict(r)) for r in cur.fetchall()]
         total_cost = sum(r["cost"] or 0 for r in history)
         return {
-            "asset": dict(asset),
+            "asset": _serialize_row(dict(asset)),
             "maintenance_count": len(history),
             "total_cost": round(total_cost, 2),
             "history": history,
@@ -342,6 +379,17 @@ class NeonProvider:
                 [*updates.values(), asset_id, user_id],
             )
         return {"status": "updated", "asset_id": asset_id, "fields_updated": list(updates.keys())}
+
+    def delete_asset(self, user_id: str, asset_id: int) -> dict:
+        with self._conn().cursor() as cur:
+            cur.execute(
+                "DELETE FROM assets WHERE id=%s AND user_id=%s RETURNING id, name",
+                [asset_id, user_id],
+            )
+            row = cur.fetchone()
+        if row is None:
+            return {"status": "error", "message": f"No asset found with id {asset_id}"}
+        return {"status": "deleted", "asset_id": row["id"], "name": row["name"]}
 
     # -- Auth / Users --
 
@@ -433,7 +481,7 @@ class NeonProvider:
         password = os.environ.get("ADMIN_PASSWORD")
         if not email or not password:
             print(
-                "No users found and ADMIN_EMAIL/ADMIN_PASSWORD not set — "
+                "No users found and ADMIN_EMAIL/ADMIN_PASSWORD not set - "
                 "set them in .env to bootstrap the first admin account."
             )
             return

@@ -1,4 +1,4 @@
-from schema.models import CategorySchema, ChecklistItem, MaintenanceTask
+﻿from schema.models import CategorySchema, ChecklistItem, MaintenanceTask
 
 ELECTRICAL = CategorySchema(
     category="electrical",
@@ -10,7 +10,7 @@ ELECTRICAL = CategorySchema(
         "Any battery replacement date you know of?",
     ],
     checklist=[
-        ChecklistItem(name="Smoke alarms", priority="high", reason="Battery replacement every 12 months — legally required"),
+        ChecklistItem(name="Smoke alarms", priority="high", reason="Battery replacement every 12 months - legally required"),
         ChecklistItem(name="Carbon monoxide detector", priority="high", reason="Critical for gas appliance homes"),
         ChecklistItem(name="Switchboard / circuit breakers", priority="high", reason="Inspect for signs of burning or outdated fuses"),
         ChecklistItem(name="Solar panels", priority="medium", reason="Annual cleaning and inverter check"),
