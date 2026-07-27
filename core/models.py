@@ -34,7 +34,15 @@ _MODEL_IDS: dict[Provider, dict[str, str]] = {
 
 
 def resolve_model(logical_name: str) -> str:
-    """Map 'haiku' or 'sonnet' to the provider-specific model ID."""
+    """Map 'haiku' or 'sonnet' to the provider-specific model ID.
+
+    Env overrides (apply across all providers):
+      LLM_MODEL_FAST  — overrides the 'haiku' tier (orchestrator routing)
+      LLM_MODEL_SMART — overrides the 'sonnet' tier (specialist agents)
+    """
+    env_key = "LLM_MODEL_FAST" if logical_name == "haiku" else "LLM_MODEL_SMART"
+    if override := os.environ.get(env_key):
+        return override
     return _MODEL_IDS[get_provider()][logical_name]
 
 
