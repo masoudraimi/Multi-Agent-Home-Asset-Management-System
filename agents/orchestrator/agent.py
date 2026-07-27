@@ -59,6 +59,8 @@ async def _run_specialist_events(
     agent_name: str,
     user_message: str,
     context: ConversationContext | None,
+    *,
+    thread_id: str | None = None,
 ) -> list[dict]:
     """Dispatch to either the LangGraph adapter or the legacy BaseAgent path."""
     if _use_langgraph(agent_name):
@@ -68,7 +70,11 @@ async def _run_specialist_events(
         else:
             raise NotImplementedError(f"USE_LANGGRAPH selected {agent_name} but no graph is compiled")
         return await run_graph_turn(
-            GRAPH, user_message, context or ConversationContext(), agent_name=agent_name
+            GRAPH,
+            user_message,
+            context or ConversationContext(),
+            agent_name=agent_name,
+            thread_id=thread_id,
         )
     agent = _load_specialist(agent_name)
     events: list[dict] = []
@@ -107,25 +113,31 @@ class OrchestratorAgent:
         user_message: str,
         context: ConversationContext,
         events: list[dict],
+        *,
+        thread_id: str | None = None,
     ) -> None:
         routes = classify_intent(user_message)
         events.append({"type": "routing", "agents": routes})
 
         if len(routes) == 1:
-            specialist_events = await _run_specialist_events(routes[0], user_message, context)
+            specialist_events = await _run_specialist_events(
+                routes[0], user_message, context, thread_id=thread_id
+            )
             events.extend(specialist_events)
         else:
             tasks = [
-                asyncio.create_task(self._collect_response(route, user_message))
+                asyncio.create_task(self._collect_response(route, user_message, thread_id=thread_id))
                 for route in routes
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
             events.extend(self._merge_responses(routes, results))
 
     async def _collect_response(
-        self, agent_name: str, user_message: str
+        self, agent_name: str, user_message: str, *, thread_id: str | None = None,
     ) -> dict:
-        agent_events = await _run_specialist_events(agent_name, user_message, None)
+        agent_events = await _run_specialist_events(
+            agent_name, user_message, None, thread_id=thread_id
+        )
         text = next(
             (e["content"] for e in agent_events if e["type"] == "assistant_text"), ""
         )

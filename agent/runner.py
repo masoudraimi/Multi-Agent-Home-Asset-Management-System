@@ -28,12 +28,17 @@ def run_turn(
 async def run_turn_in_loop(
     user_message: str,
     context: ConversationContext,
+    *,
+    thread_id: str | None = None,
 ) -> list[dict]:
     """Async variant for use inside a running event loop (Reflex, FastAPI, etc.).
 
     Calls OrchestratorAgent._dispatch_async directly, which avoids the
     asyncio.run() call inside run_turn() that would raise RuntimeError when
     an event loop is already running.
+
+    thread_id is the LangGraph checkpointer key — stable per Reflex session,
+    so pause/resume in the interrupt-based approval flow works.
 
     Returns all events as a list (same structure as run_turn yields).
     """
@@ -45,5 +50,5 @@ async def run_turn_in_loop(
         return [{"type": "assistant_text", "content": "I cannot process that request."}]
 
     events: list[dict] = []
-    await agent._dispatch_async(user_message, context, events)
+    await agent._dispatch_async(user_message, context, events, thread_id=thread_id)
     return events

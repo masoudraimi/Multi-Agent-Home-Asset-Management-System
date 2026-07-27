@@ -61,8 +61,9 @@ async def test_direct_answer_no_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     set_current_user("test-user")
     _install_stub_llm(monkeypatch, [AIMessage(content="You have 3 assets registered.")])
 
+    from langgraph.checkpoint.memory import InMemorySaver
     from agents.asset.graph import build_graph
-    graph = build_graph()
+    graph = build_graph(checkpointer=InMemorySaver())
 
     from agents.state import make_initial_state
     initial = make_initial_state(
@@ -71,7 +72,7 @@ async def test_direct_answer_no_tools(monkeypatch: pytest.MonkeyPatch) -> None:
         request_id="req_test_1",
     )
 
-    final = await graph.ainvoke(initial)
+    final = await graph.ainvoke(initial, {"configurable": {"thread_id": "t-direct"}})
 
     last = final["messages"][-1]
     assert isinstance(last, AIMessage)
@@ -87,8 +88,9 @@ async def test_guardrail_blocks_injection(monkeypatch: pytest.MonkeyPatch) -> No
     # No LLM responses configured — if the graph reaches llm_node the test would hang/fail.
     _install_stub_llm(monkeypatch, [])
 
+    from langgraph.checkpoint.memory import InMemorySaver
     from agents.asset.graph import build_graph
-    graph = build_graph()
+    graph = build_graph(checkpointer=InMemorySaver())
 
     from agents.state import make_initial_state
     initial = make_initial_state(
@@ -96,7 +98,7 @@ async def test_guardrail_blocks_injection(monkeypatch: pytest.MonkeyPatch) -> No
         user_id="test-user",
         request_id="req_inject",
     )
-    final = await graph.ainvoke(initial)
+    final = await graph.ainvoke(initial, {"configurable": {"thread_id": "t-inject"}})
 
     assert final.get("termination_reason") == "guardrail"
     last = final["messages"][-1]

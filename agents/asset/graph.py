@@ -28,9 +28,13 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
+from langgraph.types import interrupt
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+import tools.db as db
 from agents.state import AgentState
+from core.audit import audit
+from core.checkpointer import get_checkpointer
 from core.guardrails import Guardrails
 from core.llm import build_chat_model
 from core.logging import bind_correlation, clear_correlation, get_logger
@@ -205,6 +209,110 @@ def tools_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
     }
 
 
+def handle_approval_node(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
+    """Human-in-the-loop approval gate for destructive actions.
+
+    Reached only after `review_delete_asset` returned `approval_requested`.
+    Pauses the graph via `interrupt(payload)`. When resumed with
+    `Command(resume={"approved": bool})`, either executes `db.delete_asset`
+    directly (no additional LLM tokens spent) or reports the cancellation.
+    """
+    last_tm = _last_tool_message(state.get("messages", []))
+    payload = _extract_approval_payload(last_tm)
+    if not payload:
+        # Router misfired; fall through with no state mutation.
+        return {}
+
+    request_id = state.get("request_id", "")
+    user_id = state.get("user_id", "")
+
+    audit(
+        "approval_requested",
+        request_id=request_id,
+        actor="agent",
+        user_id=user_id,
+        agent="asset",
+        payload={
+            "action": "delete_asset",
+            "asset_id": payload.get("asset_id"),
+            "asset_name": payload.get("asset_name"),
+            "maintenance_records_to_delete": payload.get("maintenance_records_to_delete", 0),
+        },
+    )
+    log.info("interrupt_awaiting_approval", request_id=request_id, asset_id=payload.get("asset_id"))
+
+    # ── Graph pauses here. Resumes with {"approved": bool} via Command(resume=...) ──
+    approval = interrupt({
+        "action": "delete_asset",
+        "request_id": request_id,
+        "payload": payload,
+    })
+
+    approved = bool(approval.get("approved")) if isinstance(approval, dict) else False
+    asset_id = int(payload.get("asset_id", 0))
+    asset_name = str(payload.get("asset_name", ""))
+    cascade_count = int(payload.get("maintenance_records_to_delete", 0))
+
+    if approved:
+        try:
+            result = db.delete_asset(asset_id)
+            audit(
+                "asset_deleted",
+                request_id=request_id,
+                actor="user",
+                user_id=user_id,
+                agent="asset",
+                payload={"asset_id": asset_id, "result": result, "cascade_count": cascade_count},
+            )
+            audit(
+                "approval_confirmed",
+                request_id=request_id,
+                actor="user",
+                user_id=user_id,
+                agent="asset",
+                payload={"action": "delete_asset", "asset_id": asset_id},
+            )
+            log.info("delete_executed", request_id=request_id, asset_id=asset_id)
+            content = (
+                f"Done — deleted **{asset_name}** (id={asset_id})."
+                f" {cascade_count} maintenance record(s) were also removed."
+            )
+        except Exception as exc:
+            log.exception("delete_failed_post_approval", request_id=request_id, asset_id=asset_id)
+            audit(
+                "asset_delete_failed",
+                request_id=request_id,
+                actor="user",
+                user_id=user_id,
+                agent="asset",
+                payload={"asset_id": asset_id, "error": str(exc)[:500]},
+            )
+            content = (
+                f"I hit an error while deleting **{asset_name}** (id={asset_id}): {exc}."
+                " The record is still present — try again or check with an administrator."
+            )
+        return {
+            "messages": [AIMessage(content=content)],
+            "approval_result": "confirmed",
+            "pending_approval": None,
+        }
+
+    audit(
+        "approval_cancelled",
+        request_id=request_id,
+        actor="user",
+        user_id=user_id,
+        agent="asset",
+        payload={"action": "delete_asset", "asset_id": asset_id},
+    )
+    log.info("approval_cancelled", request_id=request_id, asset_id=asset_id)
+    return {
+        "messages": [AIMessage(content=f"OK — I've cancelled the deletion of **{asset_name}**. No changes were made.")],
+        "approval_result": "cancelled",
+        "pending_approval": None,
+    }
+
+
 def guardrail_out_node(state: AgentState) -> dict[str, Any]:
     """Sanitize the final assistant message (PII + max length)."""
     messages = state.get("messages", [])
@@ -266,12 +374,35 @@ def _route_after_llm(state: AgentState) -> str:
 
 
 def _route_after_tools(state: AgentState) -> str:
-    """After tools, always loop back to the LLM unless budget/iter is exhausted."""
-    # Budget check happens inside llm_node; here we just close the loop.
+    """After tools: route to approval gate if delete was requested, else back to LLM."""
+    last_tm = _last_tool_message(state.get("messages", []))
+    if _extract_approval_payload(last_tm) is not None:
+        return "handle_approval"
     return "llm"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
+
+def _last_tool_message(messages: list[BaseMessage]) -> ToolMessage | None:
+    for m in reversed(messages):
+        if isinstance(m, ToolMessage):
+            return m
+    return None
+
+
+def _extract_approval_payload(tm: ToolMessage | None) -> dict[str, Any] | None:
+    """If `tm` is a review_delete_asset result requesting approval, return its payload."""
+    if tm is None or tm.name != "review_delete_asset":
+        return None
+    content = tm.content
+    try:
+        data = json.loads(content) if isinstance(content, str) else content
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(data, dict) or data.get("status") != "approval_requested":
+        return None
+    return data
+
 
 def _working_memory_hint(index: dict[str, int]) -> str:
     if not index:
@@ -324,15 +455,19 @@ def _count_tool_calls(messages: list[BaseMessage]) -> int:
 def build_graph(checkpointer: Any = None) -> Any:
     """Assemble and compile the asset subgraph.
 
-    Pass a checkpointer for cross-turn persistence (needed once Phase 2
-    activates the interrupt-based approval flow). For Phase 1's single-turn
-    invocations, None is fine — history flows via `state["messages"]`.
+    The default `checkpointer=None` means fetch the process-wide instance from
+    `core.checkpointer.get_checkpointer()`. Tests can pass an explicit
+    `InMemorySaver()` (or None to opt out) to isolate state.
     """
+    if checkpointer is None:
+        checkpointer = get_checkpointer()
+
     graph = StateGraph(AgentState)
     graph.add_node("enter", enter_node)
     graph.add_node("guardrail_in", guardrail_in_node)
     graph.add_node("llm", llm_node)
     graph.add_node("tools", tools_node)
+    graph.add_node("handle_approval", handle_approval_node)
     graph.add_node("guardrail_out", guardrail_out_node)
     graph.add_node("exit", exit_node)
 
@@ -344,7 +479,12 @@ def build_graph(checkpointer: Any = None) -> Any:
         _route_after_llm,
         {"tools": "tools", "guardrail_out": "guardrail_out"},
     )
-    graph.add_conditional_edges("tools", _route_after_tools, {"llm": "llm"})
+    graph.add_conditional_edges(
+        "tools",
+        _route_after_tools,
+        {"llm": "llm", "handle_approval": "handle_approval"},
+    )
+    graph.add_edge("handle_approval", "guardrail_out")
     graph.add_edge("guardrail_out", "exit")
     graph.add_edge("exit", END)
 

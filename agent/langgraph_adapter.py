@@ -25,6 +25,7 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
+from langgraph.types import Command
 
 from agents.state import AgentState, make_initial_state
 from core.logging import bind_correlation, get_logger
@@ -74,7 +75,8 @@ async def run_graph_turn(
     }
 
     # Note: the caller (OrchestratorAgent) owns the "routing" event; adapter
-    # emits only tool_call, tool_result, assistant_text, and metrics.
+    # emits only tool_call, tool_result, assistant_text, metrics, and (on
+    # interrupt) pending_approval.
     events: list[dict] = []
     t0 = time.monotonic()
     try:
@@ -89,6 +91,24 @@ async def run_graph_turn(
         return events
 
     events.extend(_messages_to_ui_events(initial.get("messages", []), final_state.get("messages", [])))
+
+    interrupt_event = await _maybe_interrupt_event(graph, config, agent_name)
+    if interrupt_event is not None:
+        # Graph paused mid-turn; no final answer yet. Emit the pending
+        # approval and the (partial) metrics so the UI knows what happened.
+        events.append(interrupt_event)
+        events.append(_metrics_event(
+            agent_name,
+            tokens=int(final_state.get("tokens_in", 0)) + int(final_state.get("tokens_out", 0)),
+            tool_calls=_count_tool_calls(final_state.get("messages", [])),
+            latency_ms=_ms_since(t0),
+        ))
+        log.info(
+            "adapter_turn_interrupted",
+            agent=agent_name,
+            thread_id=config["configurable"]["thread_id"],
+        )
+        return events
 
     final_text = _last_assistant_text(final_state.get("messages", []))
     if final_text:
@@ -113,6 +133,109 @@ async def run_graph_turn(
         outcome=final_state.get("termination_reason") or "ok",
     )
     return events
+
+
+async def resume_graph_turn(
+    graph: Any,
+    *,
+    thread_id: str,
+    approved: bool,
+    context: ConversationContext,
+    agent_name: str = "asset",
+) -> list[dict]:
+    """Resume a graph paused at an `interrupt()` call.
+
+    Called by Reflex when the user clicks Confirm or Cancel on an approval
+    card. Returns the same UI event dict list as `run_graph_turn`, minus the
+    initial tool_call/tool_result events (those were already emitted during
+    the pause turn).
+    """
+    request_id = _new_request_id()
+    user_id = get_current_user_id_or_none() or ""
+    bind_correlation(request_id=request_id, user_id=user_id, agent=agent_name)
+
+    config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id},
+        "metadata": {
+            "request_id": request_id,
+            "user_id": user_id,
+            "agent": agent_name,
+            "resume": True,
+        },
+        "tags": [agent_name, "phase2", "resume"],
+        "recursion_limit": 50,
+    }
+
+    events: list[dict] = []
+    t0 = time.monotonic()
+    # Snapshot state before resume so we can diff new messages.
+    pre_state = await graph.aget_state(config)
+    pre_messages = list(pre_state.values.get("messages", []))
+
+    try:
+        final_state: AgentState = await graph.ainvoke(Command(resume={"approved": approved}), config)
+    except Exception:
+        log.exception("graph_resume_failed", agent=agent_name, thread_id=thread_id)
+        events.append({
+            "type": "assistant_text",
+            "content": "Sorry — I hit an internal error while completing that action.",
+        })
+        events.append(_metrics_event(agent_name, tokens=0, tool_calls=0, latency_ms=_ms_since(t0)))
+        return events
+
+    events.extend(_messages_to_ui_events(pre_messages, final_state.get("messages", [])))
+
+    final_text = _last_assistant_text(final_state.get("messages", []))
+    if final_text:
+        events.append({"type": "assistant_text", "content": final_text})
+        context.add_turn(f"[approval:{'confirmed' if approved else 'cancelled'}]", final_text)
+
+    for name, asset_id in (final_state.get("asset_index") or {}).items():
+        context.track_asset(name, int(asset_id))
+
+    events.append(_metrics_event(
+        agent_name,
+        tokens=int(final_state.get("tokens_in", 0)) + int(final_state.get("tokens_out", 0)),
+        tool_calls=_count_tool_calls(final_state.get("messages", [])),
+        latency_ms=_ms_since(t0),
+    ))
+    log.info(
+        "adapter_resume_completed",
+        agent=agent_name,
+        thread_id=thread_id,
+        approved=approved,
+        outcome=final_state.get("termination_reason") or "ok",
+    )
+    return events
+
+
+async def _maybe_interrupt_event(graph: Any, config: RunnableConfig, agent_name: str) -> dict | None:
+    """If the graph is paused at an interrupt, return a pending_approval UI event."""
+    state = await graph.aget_state(config)
+    if not state.tasks:
+        return None
+    for task in state.tasks:
+        for iv in getattr(task, "interrupts", ()) or ():
+            payload = iv.value if isinstance(iv.value, dict) else {"raw": str(iv.value)}
+            inner = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
+            request_id = payload.get("request_id") or config["metadata"].get("request_id", "")
+            asset_name = inner.get("asset_name", "unknown")
+            asset_id = inner.get("asset_id", "?")
+            cascade = inner.get("maintenance_records_to_delete", 0)
+            action = payload.get("action", "unknown_action")
+            return {
+                "type": "pending_approval",
+                "request_id": request_id,
+                "agent_name": agent_name,
+                "action_description": (
+                    f"Delete asset: {asset_name} (id={asset_id})."
+                    f" This will also remove {cascade} maintenance record(s)."
+                ),
+                "payload_str": json.dumps(inner, indent=2),
+                "action": action,
+                "thread_id": config["configurable"]["thread_id"],
+            }
+    return None
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
