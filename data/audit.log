@@ -24,3 +24,5 @@
 {"ts": 1785097310.1761034, "event": "asset_deleted", "asset_id": 4, "result": {"status": "deleted", "asset_id": 4, "name": "House Gutters"}}
 {"ts": 1785146287.9548092, "event": "approval_requested", "request_id": "Split Sy", "agent_name": "asset", "asset_name": "Split System Air Conditioner", "category": "HVAC"}
 {"ts": 1785148956.3629587, "event": "asset_added", "name": "Mitsubishi Electric MSZ-AP80VGD", "category": "HVAC", "result": {"status": "created", "asset_id": 6, "name": "Mitsubishi Electric MSZ-AP80VGD"}}
+{"ts":"2026-07-27T13:14:52.883Z","request_id":"req_1","trace_id":null,"user_id":"u_1","agent":"asset","event_type":"asset_deleted","actor":"agent","payload":{"asset_id":4,"name_hash":"sha256:7f9840f97b161338"},"app_version":"0.1.0","references":null}
+{"ts":"2026-07-27T13:14:52.888Z","request_id":"req_3","trace_id":null,"user_id":null,"agent":null,"event_type":"correction","actor":"system","payload":{"reason":"wrong asset_id"},"app_version":"0.1.0","references":"req_1"}

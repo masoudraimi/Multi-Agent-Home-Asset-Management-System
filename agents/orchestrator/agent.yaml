@@ -16,3 +16,6 @@ guardrails:
   pii_detection: true
   prompt_injection: true
   max_output_chars: 32000
+# LangGraph loop-engineering knobs (Phase 0)
+budget_usd: 0.05
+retrieve_semantic: false

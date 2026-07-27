@@ -24,6 +24,9 @@ class AgentConfig:
     memory: dict
     guardrails: dict
     yaml_path: Path
+    # Loop-engineering knobs read by LangGraph specialist subgraphs.
+    budget_usd: float | None = None      # per-turn USD budget cap; None = no limit
+    retrieve_semantic: bool = False      # run semantic retrieval node before LLM
 
 
 class AgentRegistry:
@@ -53,6 +56,8 @@ class AgentRegistry:
                     memory=raw.get("memory", {}),
                     guardrails=raw.get("guardrails", {}),
                     yaml_path=yaml_path,
+                    budget_usd=raw.get("budget_usd"),
+                    retrieve_semantic=raw.get("retrieve_semantic", False),
                 )
                 self._configs[cfg.name] = cfg
             except Exception as exc:
