@@ -6,6 +6,10 @@ import asyncio
 from collections import defaultdict
 from typing import Any, Callable
 
+from core.logging import get_logger
+
+log = get_logger(__name__)
+
 
 class EventBus:
     _instance: EventBus | None = None
@@ -29,12 +33,12 @@ class EventBus:
             try:
                 handler(event)
             except Exception:
-                pass
+                log.exception("event_bus_handler_failed", event_type=event_type.__name__)
         for q in self._async_queues.get(event_type, []):
             try:
                 q.put_nowait(event)
             except asyncio.QueueFull:
-                pass
+                log.warning("event_bus_queue_full", event_type=event_type.__name__)
 
     def clear(self) -> None:
         self._subscribers.clear()

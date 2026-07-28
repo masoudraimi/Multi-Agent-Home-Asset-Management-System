@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from agent.context import ConversationContext
+from core.memory.short_term import ConversationContext
 from agent.runner import run_turn
 
 SCENARIOS_PATH = Path(__file__).parent / "scenarios.json"

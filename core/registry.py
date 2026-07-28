@@ -7,7 +7,10 @@ from pathlib import Path
 
 import yaml
 
+from core.logging import get_logger
 from core.models import DEFAULT
+
+log = get_logger(__name__)
 
 AGENTS_ROOT = Path(__file__).parent.parent / "agents"
 
@@ -60,8 +63,8 @@ class AgentRegistry:
                     retrieve_semantic=raw.get("retrieve_semantic", False),
                 )
                 self._configs[cfg.name] = cfg
-            except Exception as exc:
-                print(f"Warning: could not load {yaml_path}: {exc}")
+            except Exception:
+                log.exception("agent_yaml_load_failed", path=str(yaml_path))
 
     def get(self, name: str) -> AgentConfig:
         if name not in self._configs:

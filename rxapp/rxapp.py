@@ -8,12 +8,15 @@ load_dotenv()
 
 # Bootstrap DB and (optionally) RAG index before the app starts
 from db_init import init_db  # noqa: E402
+from core.logging import get_logger  # noqa: E402
+
+_boot_log = get_logger("rxapp.boot")
 init_db()
 try:
     from knowledge.rag.indexer import index_all
     index_all()
 except Exception:
-    pass
+    _boot_log.exception("rag_indexer_failed")
 
 from rxapp.login_page import login_page  # noqa: E402
 from rxapp.index_page import index_page  # noqa: E402

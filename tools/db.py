@@ -230,7 +230,7 @@ def get_onboarding_questions(asset_type: str) -> dict:
 
     asset_type: The type or category of asset being added (e.g. 'appliances', 'plant', 'HVAC')
     """
-    from workflows.onboarding import get_onboarding_questions as _fn
+    from agents.asset.workflows.onboarding import get_onboarding_questions as _fn
     return _fn(asset_type)
 
 
@@ -239,7 +239,7 @@ def review_asset_draft(draft_json: str) -> dict:
 
     draft_json: JSON string of the asset fields collected so far
     """
-    from workflows.onboarding import review_asset_draft as _fn
+    from agents.asset.workflows.onboarding import review_asset_draft as _fn
     return _fn(draft_json)
 
 
@@ -252,7 +252,7 @@ def review_delete_asset(asset_id: int) -> dict:
 
     asset_id: ID of the asset the user wants to delete
     """
-    from workflows.deletion import review_delete_asset as _fn
+    from agents.asset.workflows.deletion import review_delete_asset as _fn
     return _fn(asset_id)
 
 
@@ -261,11 +261,11 @@ def get_plant_care_schedule(asset_id: int) -> dict:
 
     asset_id: ID of the plant/tree asset
     """
-    from workflows.plant_care import get_plant_care_schedule as _fn
+    from agents.maintenance.workflows.plant_care import get_plant_care_schedule as _fn
     return _fn(asset_id)
 
 
 def suggest_missing_assets() -> dict:
     """Suggest commonly-missed home assets by comparing your database to a comprehensive checklist."""
-    from workflows.suggestions import suggest_missing_assets as _fn
+    from agents.asset.workflows.suggestions import suggest_missing_assets as _fn
     return _fn()

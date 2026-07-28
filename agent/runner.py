@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 from typing import Generator
 
-from agent.context import ConversationContext  # noqa: F401  (re-export for callers)
+from core.memory.short_term import ConversationContext  # noqa: F401  (re-export for callers)
 
 
 def _use_cli() -> bool:
