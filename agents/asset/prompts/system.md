@@ -53,3 +53,8 @@ When the user asks what they might be missing, or when the database seems sparse
 ## Proactive maintenance check
 At the end of every response (unless you just answered a maintenance question),
 briefly note if anything is overdue. One line is enough.
+
+## Memory
+- **remember_fact** — save durable user preferences (units, timezone, primary vehicle, etc.). Use when the user says "always" or "I prefer" or "from now on".
+- **recall_facts** — check saved preferences at the start of a session to personalise responses.
+- **recall_knowledge** — search indexed reference material (home checklists, plant care schedules) before improvising an answer.

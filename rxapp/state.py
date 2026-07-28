@@ -8,7 +8,6 @@ Reflex's async event loop.
 
 from __future__ import annotations
 
-import asyncio
 import json
 
 import dataclasses
@@ -39,6 +38,87 @@ def _set_user(user_id: str) -> None:
     set_current_user(user_id)
 
 
+def _build_from_events(raw_events: list[dict]) -> tuple[list["ToolCall"], str, list["Approval"]]:
+    """Fold a list of adapter/runner events into UI-facing objects.
+
+    Returns (tool_calls, final_answer_text, new_approvals). tool_calls are
+    numbered starting at 1. Missing tool_result entries are left with empty
+    result_str. Very long results are truncated at 25 lines.
+    """
+    tool_calls: list[ToolCall] = []
+    answer = ""
+    step = 0
+    pending_calls: dict[str, ToolCall] = {}
+    new_approvals: list[Approval] = []
+
+    for ev in raw_events:
+        t = ev.get("type")
+        if t == "tool_call":
+            step += 1
+            tc = ToolCall(
+                step=step,
+                name=ev["name"],
+                icon=_TOOL_ICONS.get(ev["name"], "🔩"),
+                args_str=json.dumps(ev.get("args", {}), indent=2),
+                result_str="",
+            )
+            tool_calls.append(tc)
+            pending_calls[ev["call_id"]] = tc
+        elif t == "tool_result":
+            tc = pending_calls.get(ev.get("call_id", ""))
+            if tc:
+                result = ev.get("result", "")
+                if isinstance(result, (dict, list)):
+                    result = json.dumps(result, indent=2)
+                lines = str(result).splitlines()
+                if len(lines) > 25:
+                    result = "\n".join(lines[:25]) + "\n…(truncated)"
+                tc.result_str = str(result)
+        elif t == "assistant_text":
+            answer = ev.get("content", "")
+        elif t == "pending_approval":
+            new_approvals.append(Approval(
+                request_id=ev.get("request_id", ""),
+                agent_name=ev.get("agent_name", ""),
+                action_description=ev.get("action_description", ""),
+                payload_str=ev.get("payload_str", ""),
+                thread_id=ev.get("thread_id", ""),
+            ))
+
+    return tool_calls, answer, new_approvals
+
+
+async def _resolve_approval(
+    approval: "Approval | None",
+    ctx,
+    *,
+    approved: bool,
+) -> list[dict]:
+    """Route confirm/cancel to the right backend.
+
+    Graph-based approvals carry a `thread_id` — resume via LangGraph's
+    `Command(resume=...)`. CLI-based approvals have no thread_id — send the
+    legacy `__approval_confirmed__` / `__approval_cancelled__` sentinel so
+    the next CLI turn's LLM sees it in message history.
+    """
+    if approval is None:
+        return []
+    if approval.thread_id:
+        from agent.langgraph_adapter import resume_graph_turn
+        from agents.asset.graph import GRAPH
+        return await resume_graph_turn(
+            GRAPH,
+            thread_id=approval.thread_id,
+            approved=approved,
+            context=ctx,
+            agent_name=approval.agent_name or "asset",
+        )
+    # CLI path — sentinel resume
+    from agent.runner import run_turn_in_loop
+    sentinel = "__approval_confirmed__" if approved else "__approval_cancelled__"
+    return await run_turn_in_loop(sentinel, ctx)
+
+
 # ── Typed data models ─────────────────────────────────────────────────────────
 
 @dataclasses.dataclass
@@ -64,6 +144,7 @@ class Approval:
     agent_name: str = ""
     action_description: str = ""
     payload_str: str = ""
+    thread_id: str = ""     # populated when the approval comes from a LangGraph interrupt
 
 
 @dataclasses.dataclass
@@ -88,6 +169,7 @@ class State(rx.State):
     messages: list[Message] = []
     is_thinking: bool = False
     pending_approvals: list[Approval] = []
+    session_id: str = ""     # stable per Reflex session; drives LangGraph thread_id
 
     # ── Assets ─────────────────────────────────────────────────────────────────
     assets: list[dict] = []
@@ -184,64 +266,16 @@ class State(rx.State):
         yield
 
         _set_user(self.user_id)
+        if not self.session_id:
+            import uuid
+            self.session_id = uuid.uuid4().hex[:16]
+        thread_id = f"{self.user_id}:{self.session_id}"
         ctx = get_context(self.user_id)
 
-        from core.event_bus import EventBus
-        from core.events import HumanApprovalRequested
+        from agent.runner import run_turn_in_loop
+        raw_events = await run_turn_in_loop(prompt, ctx, thread_id=thread_id)
 
-        approval_queue: asyncio.Queue = asyncio.Queue()
-        bus = EventBus()
-        bus.subscribe_async(HumanApprovalRequested, approval_queue)
-
-        try:
-            from agent.runner import run_turn_in_loop
-            raw_events = await run_turn_in_loop(prompt, ctx)
-        finally:
-            try:
-                bus._async_queues[HumanApprovalRequested].remove(approval_queue)
-            except (ValueError, KeyError):
-                pass
-
-        tool_calls: list[ToolCall] = []
-        answer = ""
-        step = 0
-        pending_calls: dict[str, ToolCall] = {}
-
-        for ev in raw_events:
-            t = ev.get("type")
-            if t == "tool_call":
-                step += 1
-                tc = ToolCall(
-                    step=step,
-                    name=ev["name"],
-                    icon=_TOOL_ICONS.get(ev["name"], "🔩"),
-                    args_str=json.dumps(ev.get("args", {}), indent=2),
-                    result_str="",
-                )
-                tool_calls.append(tc)
-                pending_calls[ev["call_id"]] = tc
-            elif t == "tool_result":
-                tc = pending_calls.get(ev["call_id"])
-                if tc:
-                    result = ev.get("result", "")
-                    if isinstance(result, (dict, list)):
-                        result = json.dumps(result, indent=2)
-                    lines = str(result).splitlines()
-                    if len(lines) > 25:
-                        result = "\n".join(lines[:25]) + "\n…(truncated)"
-                    tc.result_str = str(result)
-            elif t == "assistant_text":
-                answer = ev.get("content", "")
-
-        new_approvals: list[Approval] = []
-        while not approval_queue.empty():
-            ap = approval_queue.get_nowait()
-            new_approvals.append(Approval(
-                request_id=ap.request_id,
-                agent_name=ap.agent_name,
-                action_description=ap.action_description,
-                payload_str=json.dumps(ap.payload, indent=2),
-            ))
+        tool_calls, answer, new_approvals = _build_from_events(raw_events)
 
         if answer:
             self.messages = [
@@ -261,6 +295,7 @@ class State(rx.State):
 
     @rx.event
     async def confirm_approval(self, request_id: str):
+        approval = next((a for a in self.pending_approvals if a.request_id == request_id), None)
         self.pending_approvals = [a for a in self.pending_approvals if a.request_id != request_id]
         self.is_thinking = True
         yield
@@ -268,33 +303,39 @@ class State(rx.State):
         _set_user(self.user_id)
         ctx = get_context(self.user_id)
 
-        from agent.runner import run_turn_in_loop
-        raw_events = await run_turn_in_loop("__approval_confirmed__", ctx)
+        raw_events = await _resolve_approval(approval, ctx, approved=True)
+        tool_calls, answer, more_approvals = _build_from_events(raw_events)
 
-        answer = next((e["content"] for e in raw_events if e.get("type") == "assistant_text"), "")
-        tool_calls: list[ToolCall] = []
-        step = 0
-        pending_calls: dict[str, ToolCall] = {}
-        for ev in raw_events:
-            t = ev.get("type")
-            if t == "tool_call":
-                step += 1
-                tc = ToolCall(
-                    step=step,
-                    name=ev["name"],
-                    icon=_TOOL_ICONS.get(ev["name"], "🔩"),
-                    args_str=json.dumps(ev.get("args", {}), indent=2),
-                    result_str="",
-                )
-                tool_calls.append(tc)
-                pending_calls[ev["call_id"]] = tc
-            elif t == "tool_result":
-                tc = pending_calls.get(ev["call_id"])
-                if tc:
-                    result = ev.get("result", "")
-                    if isinstance(result, (dict, list)):
-                        result = json.dumps(result, indent=2)
-                    tc.result_str = str(result)
+        if answer:
+            self.messages = [
+                *self.messages,
+                Message(
+                    role="assistant",
+                    content=answer,
+                    has_tools=len(tool_calls) > 0,
+                    tool_calls=tool_calls,
+                ),
+            ]
+        if more_approvals:
+            self.pending_approvals = [*self.pending_approvals, *more_approvals]
+        self.is_thinking = False
+
+    @rx.event
+    async def cancel_approval(self, request_id: str):
+        approval = next((a for a in self.pending_approvals if a.request_id == request_id), None)
+        self.pending_approvals = [a for a in self.pending_approvals if a.request_id != request_id]
+
+        # Legacy BaseAgent approvals (no thread_id): just drop, no follow-up call.
+        if approval is None or not approval.thread_id:
+            return
+
+        self.is_thinking = True
+        yield
+
+        _set_user(self.user_id)
+        ctx = get_context(self.user_id)
+        raw_events = await _resolve_approval(approval, ctx, approved=False)
+        tool_calls, answer, _ = _build_from_events(raw_events)
 
         if answer:
             self.messages = [
@@ -307,10 +348,6 @@ class State(rx.State):
                 ),
             ]
         self.is_thinking = False
-
-    @rx.event
-    def cancel_approval(self, request_id: str):
-        self.pending_approvals = [a for a in self.pending_approvals if a.request_id != request_id]
 
     @rx.event
     def clear_chat(self):

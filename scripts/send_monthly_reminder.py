@@ -13,7 +13,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from skills.telegram_digest import send_monthly_digest
+from agents.maintenance.workflows.telegram import build_monthly_digest, send_telegram_message
+
+
+def send_monthly_digest() -> dict:
+    text = build_monthly_digest()
+    result = send_telegram_message(text)
+    return {**result, "digest_preview": text[:300]}
+
 
 if __name__ == "__main__":
     result = send_monthly_digest()

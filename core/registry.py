@@ -7,7 +7,10 @@ from pathlib import Path
 
 import yaml
 
+from core.logging import get_logger
 from core.models import DEFAULT
+
+log = get_logger(__name__)
 
 AGENTS_ROOT = Path(__file__).parent.parent / "agents"
 
@@ -24,6 +27,9 @@ class AgentConfig:
     memory: dict
     guardrails: dict
     yaml_path: Path
+    # Loop-engineering knobs read by LangGraph specialist subgraphs.
+    budget_usd: float | None = None      # per-turn USD budget cap; None = no limit
+    retrieve_semantic: bool = False      # run semantic retrieval node before LLM
 
 
 class AgentRegistry:
@@ -53,10 +59,12 @@ class AgentRegistry:
                     memory=raw.get("memory", {}),
                     guardrails=raw.get("guardrails", {}),
                     yaml_path=yaml_path,
+                    budget_usd=raw.get("budget_usd"),
+                    retrieve_semantic=raw.get("retrieve_semantic", False),
                 )
                 self._configs[cfg.name] = cfg
-            except Exception as exc:
-                print(f"Warning: could not load {yaml_path}: {exc}")
+            except Exception:
+                log.exception("agent_yaml_load_failed", path=str(yaml_path))
 
     def get(self, name: str) -> AgentConfig:
         if name not in self._configs:

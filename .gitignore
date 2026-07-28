@@ -19,6 +19,10 @@ wheels/
 
 # Data
 data/home_assets.db
+data/checkpoints.sqlite
+data/langfuse-postgres/
+data/langfuse-clickhouse/
+data/langfuse-minio/
 
 # Eval output
 eval/results.json
