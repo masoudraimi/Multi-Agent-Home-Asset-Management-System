@@ -34,3 +34,8 @@ When asked for a full report or health check:
 4. Produce a structured report: inventory summary, maintenance status, spend summary, warranty alerts
 
 Be concise but thorough. Use tables or lists where appropriate.
+
+## Memory
+- **recall_knowledge** — search indexed reference material (home checklists, benchmarks) when relevant.
+- **remember_fact** — save durable user preferences (report cadence, preferred currency, weekly-digest opt-in).
+- **recall_facts** — read saved preferences to tailor the report format.

@@ -18,14 +18,15 @@ Import `TOOLS` (a list of `BaseTool`) and bind it directly:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from langchain_core.tools import BaseTool, tool
+from pydantic import BaseModel, Field
 
 import tools.db as db
 from core.logging import get_logger
 from core.metrics import emit_tool_call
-from tools.mcp_server import (
+from tools.schemas import (
     AddAssetInput,
     DeleteAssetInput,
     GetAssetHistoryInput,
@@ -43,6 +44,31 @@ from tools.mcp_server import (
 )
 
 log = get_logger(__name__)
+
+
+# ── Memory tool schemas (Phase 5) ─────────────────────────────────────────
+
+class RecallKnowledgeInput(BaseModel):
+    """Search indexed knowledge (plant care schedules, home checklist, etc.)."""
+    query: str = Field(..., description="Natural-language query")
+    top_k: int = Field(3, description="How many hits to return", ge=1, le=10)
+    agent_scope: Optional[str] = Field(
+        None,
+        description="Narrow to a specific specialist's knowledge base ('maintenance'|'insights'|'asset'). "
+                    "Omit to search across all.",
+    )
+
+
+class RememberFactInput(BaseModel):
+    """Save a per-user preference or fact for future turns."""
+    key: str = Field(..., description="Short slug, e.g. 'preferred_units' or 'primary_vehicle'")
+    value: str = Field(..., description="Value to persist. Store dates as ISO strings.")
+    category: str = Field("preference", description="Free-text label for grouping")
+
+
+class RecallFactsInput(BaseModel):
+    """Read all stored user facts, optionally filtered by key substring."""
+    pattern: Optional[str] = Field(None, description="Substring to match against keys")
 
 
 def _call(name: str, fn: Any, **kwargs: Any) -> Any:
@@ -206,6 +232,96 @@ def delete_asset(**kwargs: Any) -> dict:
     return _call("delete_asset", db.delete_asset, **kwargs)
 
 
+# ── Memory tools (Phase 5) ─────────────────────────────────────────────────
+# Long-term memory is user-scoped and cross-specialist (agent_name="user"),
+# so preferences persist regardless of which specialist stored them.
+
+_LTM_AGENT_NAME = "user"
+
+
+@tool("recall_knowledge", args_schema=RecallKnowledgeInput)
+def recall_knowledge(**kwargs: Any) -> dict:
+    """Search indexed knowledge (plant care schedules, home checklists, ...).
+
+    Use this when the user asks something a static reference could answer, or
+    when you want to ground your advice in the app's curated knowledge. Search
+    is embedding-based; returns the top matches with a relevance score.
+    """
+    from core.memory.semantic import SemanticMemory
+
+    query: str = kwargs["query"]
+    top_k: int = int(kwargs.get("top_k", 3))
+    scope: str | None = kwargs.get("agent_scope")
+
+    def _call() -> dict:
+        scopes = [scope] if scope else ["asset", "maintenance", "insights"]
+        hits: list[dict] = []
+        for agent in scopes:
+            try:
+                for row in SemanticMemory(agent).retrieve(query, top_k=top_k):
+                    hits.append({**row, "source_agent": agent})
+            except Exception:
+                log.exception("recall_knowledge_agent_failed", agent=agent)
+        hits.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+        return {"query": query, "hits": hits[:top_k]}
+
+    return _call_via_metrics("recall_knowledge", _call)
+
+
+@tool("remember_fact", args_schema=RememberFactInput)
+def remember_fact(**kwargs: Any) -> dict:
+    """Persist a short user fact/preference for future conversations.
+
+    Use for durable info the user tells you once and expects you to remember —
+    preferred units, timezone, service preferences, primary vehicle, etc.
+    Overwrites any prior value for the same key.
+    """
+    from core.memory.long_term import LongTermMemory
+
+    key: str = kwargs["key"]
+    value: str = kwargs["value"]
+    category: str = kwargs.get("category", "preference")
+
+    def _call() -> dict:
+        LongTermMemory(_LTM_AGENT_NAME).set(key, {"value": value, "category": category})
+        return {"status": "stored", "key": key}
+
+    return _call_via_metrics("remember_fact", _call)
+
+
+@tool("recall_facts", args_schema=RecallFactsInput)
+def recall_facts(**kwargs: Any) -> dict:
+    """List everything the user has told you to remember (their preferences).
+
+    Optional substring filter on keys. Returns a dict of {key: {value, category}}.
+    """
+    from core.memory.long_term import LongTermMemory
+
+    pattern: str | None = kwargs.get("pattern")
+
+    def _call() -> dict:
+        raw = LongTermMemory(_LTM_AGENT_NAME).get_all() or {}
+        if pattern:
+            raw = {k: v for k, v in raw.items() if pattern.lower() in k.lower()}
+        return {"facts": raw, "count": len(raw)}
+
+    return _call_via_metrics("recall_facts", _call)
+
+
+def _call_via_metrics(name: str, fn: Any) -> Any:
+    """Same logging + metrics scaffolding as _call() but for tools that don't map 1:1 to db.py."""
+    log.info("tool_call_started", tool=name)
+    try:
+        result = fn()
+    except Exception:
+        emit_tool_call(name, "error")
+        log.exception("tool_call_failed", tool=name)
+        raise
+    emit_tool_call(name, "success")
+    log.info("tool_call_finished", tool=name)
+    return result
+
+
 # ── Registry ──────────────────────────────────────────────────────────────
 # Order matches the categorisation above for readability in system prompts.
 TOOLS: list[BaseTool] = [
@@ -223,6 +339,10 @@ TOOLS: list[BaseTool] = [
     review_asset_draft,
     review_delete_asset,
     delete_asset,
+    # Memory (Phase 5)
+    recall_knowledge,
+    remember_fact,
+    recall_facts,
 ]
 
 TOOLS_BY_NAME: dict[str, BaseTool] = {t.name: t for t in TOOLS}

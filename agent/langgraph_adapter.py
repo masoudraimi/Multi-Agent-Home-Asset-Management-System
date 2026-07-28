@@ -81,12 +81,9 @@ async def run_graph_turn(
     t0 = time.monotonic()
     try:
         final_state: AgentState = await graph.ainvoke(initial, config)
-    except Exception:
-        log.exception("graph_ainvoke_failed", agent=agent_name)
-        events.append({
-            "type": "assistant_text",
-            "content": "Sorry — I hit an internal error. Please try again.",
-        })
+    except Exception as exc:
+        message = _classify_error_for_ui(exc, agent_name)
+        events.append({"type": "assistant_text", "content": message})
         events.append(_metrics_event(agent_name, tokens=0, tool_calls=0, latency_ms=_ms_since(t0)))
         return events
 
@@ -207,6 +204,53 @@ async def resume_graph_turn(
         outcome=final_state.get("termination_reason") or "ok",
     )
     return events
+
+
+def _classify_error_for_ui(exc: BaseException, agent_name: str) -> str:
+    """Convert an exception raised from the graph into a helpful chat message.
+
+    Handles four buckets:
+      * Config errors (missing key, unsupported provider) → tell them the fix.
+      * Rate limits (429) → name the provider and suggest switching model.
+      * Auth failures (401/403) → tell them the key is bad.
+      * Everything else → generic message + WARN log with full trace.
+    """
+    from core.llm import MissingCredentialsError, UnsupportedProviderError
+
+    if isinstance(exc, (MissingCredentialsError, UnsupportedProviderError)):
+        log.error("graph_ainvoke_config_error", agent=agent_name, error=str(exc))
+        return f"⚠ Configuration error: {exc}"
+
+    try:
+        from anthropic import APIStatusError as _AnthropicStatus
+    except ImportError:
+        _AnthropicStatus = None  # type: ignore[assignment]
+    try:
+        from openai import APIStatusError as _OpenAIStatus
+    except ImportError:
+        _OpenAIStatus = None  # type: ignore[assignment]
+
+    status_types = tuple(t for t in (_AnthropicStatus, _OpenAIStatus) if t is not None)
+    if status_types and isinstance(exc, status_types):
+        status = getattr(exc, "status_code", None)
+        body = getattr(exc, "body", None) or {}
+        raw = ""
+        if isinstance(body, dict):
+            raw = str(body.get("error", body.get("message", "")))[:250]
+        if status == 429:
+            log.warning("graph_ainvoke_rate_limited", agent=agent_name, status=status, body_preview=raw)
+            return (
+                "⚠ Rate limited by the upstream model provider. "
+                "Try again in a minute, or switch to a different model — set "
+                "`LLM_MODEL_SMART=anthropic/claude-sonnet-4-6` (or "
+                "`google/gemini-3.6-flash`) in your `.env` and restart."
+            )
+        if status in (401, 403):
+            log.error("graph_ainvoke_auth_error", agent=agent_name, status=status, body_preview=raw)
+            return f"⚠ Authentication error ({status}): check `OPENROUTER_API_KEY` / `ANTHROPIC_API_KEY` in `.env`."
+
+    log.exception("graph_ainvoke_failed", agent=agent_name)
+    return "Sorry — I hit an internal error. Please try again."
 
 
 async def _maybe_interrupt_event(graph: Any, config: RunnableConfig, agent_name: str) -> dict | None:

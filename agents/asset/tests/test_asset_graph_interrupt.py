@@ -48,7 +48,7 @@ def _tool_call_delete_asset(asset_id: int, call_id: str = "call_1") -> AIMessage
 
 
 def _install_llm(monkeypatch: pytest.MonkeyPatch, responses: list[AIMessage]) -> None:
-    monkeypatch.setattr("agents.asset.graph.build_chat_model", lambda *a, **kw: _StubChatModel(responses))
+    monkeypatch.setattr("agents._specialist.build_chat_model", lambda *a, **kw: _StubChatModel(responses))
 
 
 def _install_delete_recorder(monkeypatch: pytest.MonkeyPatch) -> dict:

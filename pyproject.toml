@@ -34,4 +34,6 @@ dependencies = [
     "structlog>=26.1.0",
     "prometheus-client>=0.26.0",
     "tenacity>=9.1.0",
+    # Semantic memory (numpy is used by core/memory/semantic.py for cosine similarity)
+    "numpy>=1.26",
 ]

@@ -8,7 +8,6 @@ Reflex's async event loop.
 
 from __future__ import annotations
 
-import asyncio
 import json
 
 import dataclasses
@@ -37,13 +36,6 @@ def _set_user(user_id: str) -> None:
     """Apply the user ContextVar for this async task."""
     from core.session import set_current_user
     set_current_user(user_id)
-
-
-def _langgraph_owns_approvals() -> bool:
-    """True when any specialist that can raise an approval runs on the graph."""
-    from agents.orchestrator.agent import _use_langgraph
-    # Asset is the only specialist that publishes HumanApprovalRequested today.
-    return _use_langgraph("asset")
 
 
 def _build_from_events(raw_events: list[dict]) -> tuple[list["ToolCall"], str, list["Approval"]]:
@@ -102,13 +94,16 @@ async def _resolve_approval(
     *,
     approved: bool,
 ) -> list[dict]:
-    """Route confirm/cancel of a pending approval to the right backend.
+    """Route confirm/cancel to the right backend.
 
-    Graph-based approvals carry a thread_id and resume via LangGraph's
-    Command(resume=...). Legacy BaseAgent approvals fall back to the
-    __approval_confirmed__ / __approval_cancelled__ sentinel path.
+    Graph-based approvals carry a `thread_id` — resume via LangGraph's
+    `Command(resume=...)`. CLI-based approvals have no thread_id — send the
+    legacy `__approval_confirmed__` / `__approval_cancelled__` sentinel so
+    the next CLI turn's LLM sees it in message history.
     """
-    if approval is not None and approval.thread_id:
+    if approval is None:
+        return []
+    if approval.thread_id:
         from agent.langgraph_adapter import resume_graph_turn
         from agents.asset.graph import GRAPH
         return await resume_graph_turn(
@@ -118,7 +113,7 @@ async def _resolve_approval(
             context=ctx,
             agent_name=approval.agent_name or "asset",
         )
-    # Legacy path
+    # CLI path — sentinel resume
     from agent.runner import run_turn_in_loop
     sentinel = "__approval_confirmed__" if approved else "__approval_cancelled__"
     return await run_turn_in_loop(sentinel, ctx)
@@ -277,42 +272,10 @@ class State(rx.State):
         thread_id = f"{self.user_id}:{self.session_id}"
         ctx = get_context(self.user_id)
 
-        # Only subscribe to the EventBus approval channel when the BaseAgent
-        # path is active for asset (the graph uses interrupt() instead).
-        eventbus_active = not _langgraph_owns_approvals()
-        approval_queue: asyncio.Queue | None = None
-        bus = None
-        if eventbus_active:
-            from core.event_bus import EventBus
-            from core.events import HumanApprovalRequested
-            approval_queue = asyncio.Queue()
-            bus = EventBus()
-            bus.subscribe_async(HumanApprovalRequested, approval_queue)
-
-        try:
-            from agent.runner import run_turn_in_loop
-            raw_events = await run_turn_in_loop(prompt, ctx, thread_id=thread_id)
-        finally:
-            if bus and approval_queue is not None:
-                try:
-                    from core.events import HumanApprovalRequested
-                    bus._async_queues[HumanApprovalRequested].remove(approval_queue)
-                except (ValueError, KeyError):
-                    pass
+        from agent.runner import run_turn_in_loop
+        raw_events = await run_turn_in_loop(prompt, ctx, thread_id=thread_id)
 
         tool_calls, answer, new_approvals = _build_from_events(raw_events)
-
-        # Merge EventBus-published approvals (BaseAgent path)
-        if approval_queue is not None:
-            while not approval_queue.empty():
-                ap = approval_queue.get_nowait()
-                new_approvals.append(Approval(
-                    request_id=ap.request_id,
-                    agent_name=ap.agent_name,
-                    action_description=ap.action_description,
-                    payload_str=json.dumps(ap.payload, indent=2),
-                    thread_id="",     # empty ⇒ resume via old sentinel path
-                ))
 
         if answer:
             self.messages = [

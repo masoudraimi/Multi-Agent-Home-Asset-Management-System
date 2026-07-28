@@ -38,3 +38,8 @@ For assets with no maintenance history, suggest standard intervals:
 
 ## Proactive check
 At the end of every response, briefly note the count of overdue tasks. One line only.
+
+## Memory
+- **recall_knowledge** — search indexed reference material (plant care schedules, care templates) before improvising.
+- **remember_fact** — save durable user preferences (service intervals, reminder cadence, preferred vendors).
+- **recall_facts** — read saved preferences at the start of a session to personalise reminders.

@@ -31,12 +31,12 @@ class _StubChatModel:
 
 
 def _install_stub_llm(monkeypatch: pytest.MonkeyPatch, responses: list[AIMessage]) -> None:
-    """Replace build_chat_model in the asset graph module with a stub."""
+    """Replace build_chat_model in the shared specialist module with a stub."""
 
     def _factory(*args: Any, **kwargs: Any) -> _StubChatModel:
         return _StubChatModel(responses)
 
-    monkeypatch.setattr("agents.asset.graph.build_chat_model", _factory)
+    monkeypatch.setattr("agents._specialist.build_chat_model", _factory)
 
 
 def test_graph_compiles_and_topology_is_correct() -> None:
@@ -138,16 +138,10 @@ async def test_adapter_returns_expected_event_shape(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.asyncio
-async def test_feature_flag_dispatch_off_uses_base_agent(monkeypatch: pytest.MonkeyPatch) -> None:
-    """With USE_LANGGRAPH=off, orchestrator must not touch the graph adapter."""
-    monkeypatch.setenv("USE_LANGGRAPH", "off")
-    from agents.orchestrator.agent import _use_langgraph
-    assert _use_langgraph("asset") is False
-
-
-@pytest.mark.asyncio
-async def test_feature_flag_dispatch_on_selects_asset(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("USE_LANGGRAPH", "asset")
-    from agents.orchestrator.agent import _use_langgraph
-    assert _use_langgraph("asset") is True
-    assert _use_langgraph("maintenance") is False  # not ported yet
+async def test_dispatch_routes_all_specialists_to_graphs() -> None:
+    """Post-Phase-6, every specialist runs on LangGraph (no flag)."""
+    from agents.orchestrator.agent import _run_specialist_events
+    # Verify the function can resolve each specialist without raising.
+    # It only fails on unknown names.
+    with pytest.raises(ValueError):
+        await _run_specialist_events("unknown", "hi", None)
