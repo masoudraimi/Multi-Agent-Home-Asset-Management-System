@@ -30,6 +30,9 @@ class AgentConfig:
     # Loop-engineering knobs read by LangGraph specialist subgraphs.
     budget_usd: float | None = None      # per-turn USD budget cap; None = no limit
     retrieve_semantic: bool = False      # run semantic retrieval node before LLM
+    rate_limit_per_min: int = 30         # token-bucket refill rate, per (user, agent)
+    rate_limit_burst: int = 10           # token-bucket capacity
+    injection_classifier_enabled: bool = True  # escalate to LLM classifier when regex is clean
 
 
 class AgentRegistry:
@@ -61,6 +64,11 @@ class AgentRegistry:
                     yaml_path=yaml_path,
                     budget_usd=raw.get("budget_usd"),
                     retrieve_semantic=raw.get("retrieve_semantic", False),
+                    rate_limit_per_min=raw.get("rate_limit_per_min", 30),
+                    rate_limit_burst=raw.get("rate_limit_burst", 10),
+                    injection_classifier_enabled=raw.get("guardrails", {}).get(
+                        "injection_classifier", True
+                    ),
                 )
                 self._configs[cfg.name] = cfg
             except Exception:

@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv python install 3.13
+      - run: uv sync --frozen
+      - name: Run offline test suite
+        run: >
+          uv run pytest agents/asset/tests/
+          agents/maintenance/tests/test_maintenance_graph.py
+          agents/insights/tests/
+          agents/orchestrator/tests/test_dispatcher.py
+          tests/ -q
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # If this flags a known dev-only placeholder (e.g. the local
+        # Langfuse compose credentials in infra/langfuse-compose.yaml), add
+        # a .gitleaks.toml allowlist entry rather than disabling the job.
+
+  prompt-version-check:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v3
+      - run: uv python install 3.13
+      - run: uv sync --frozen
+      - run: uv run python scripts/check_prompt_version_bump.py origin/${{ github.base_ref }} HEAD

@@ -2,13 +2,19 @@
 
 Single source of truth for tools used by any LangGraph specialist subgraph.
 Each wrapper:
-  * reuses the Pydantic schemas from `tools/mcp_server.py` (no duplication)
+  * reuses the Pydantic schemas from `tools/schemas.py` (no duplication)
   * calls the plain sync function in `tools/db.py`
   * emits a `tool_call` metric with outcome=success|error
   * emits structured logs on entry, exit, and failure
 
-Errors propagate — the surrounding LangGraph `ToolNode` decides whether to
-feed the error back to the LLM (default) or bail. Do not catch and swallow.
+Errors propagate — do not catch and swallow. The installed LangGraph
+version's default `ToolNode` error handling only catches its own internal
+`ToolInvocationError` and re-raises everything else, so an uncaught
+exception here bails out to `agent/langgraph_adapter.py`'s top-level
+`try/except` (a generic error message to the user), not back to the LLM.
+`agents/_specialist.py::SpecialistGraph` explicitly opts `AuthorizationError`
+(`core/authz.py`) into feed-back-to-LLM handling via `handle_tool_errors=`;
+follow that pattern for any other exception a tool should recover from.
 
 Import `TOOLS` (a list of `BaseTool`) and bind it directly:
 
@@ -24,6 +30,7 @@ from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field
 
 import tools.db as db
+from core.authz import require_role
 from core.logging import get_logger
 from core.metrics import emit_tool_call
 from tools.schemas import (
@@ -221,11 +228,18 @@ def review_delete_asset(**kwargs: Any) -> dict:
 
 
 @tool("delete_asset", args_schema=DeleteAssetInput)
+@require_role("user", "admin")
 def delete_asset(**kwargs: Any) -> dict:
     """Permanently delete an asset and its maintenance history.
 
     Only call after the user has resumed with approval via the interrupt in
     agents/asset/graph.py. Maintenance_tasks cascades via ON DELETE.
+
+    Gated by role (any authenticated user or admin) as well as the HITL
+    approval above — today ownership (user_id scoping in tools/db.py) is the
+    real access boundary for asset mutations, not role, so this isn't a
+    business-rule restriction. It proves the role-check + audit path end to
+    end and is the seam for an actually role-restricted tool later.
 
     asset_id: ID of the asset to delete.
     """
@@ -241,11 +255,15 @@ _LTM_AGENT_NAME = "user"
 
 @tool("recall_knowledge", args_schema=RecallKnowledgeInput)
 def recall_knowledge(**kwargs: Any) -> dict:
-    """Search indexed knowledge (plant care schedules, home checklists, ...).
+    """Search indexed knowledge (plant care schedules, home checklists, ingested
+    manual excerpts, ...).
 
     Use this when the user asks something a static reference could answer, or
     when you want to ground your advice in the app's curated knowledge. Search
-    is embedding-based; returns the top matches with a relevance score.
+    is embedding-based; returns the top matches with a relevance score. Each
+    hit's `metadata.source` is a citation key — reference it in your answer
+    (e.g. "[checklist#12]") the same way you would for context that arrived
+    automatically via retrieved reference context above.
     """
     from core.memory.semantic import SemanticMemory
 

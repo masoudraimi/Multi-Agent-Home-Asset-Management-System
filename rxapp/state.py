@@ -32,10 +32,11 @@ _CAT_ICONS: dict[str, str] = {
 }
 
 
-def _set_user(user_id: str) -> None:
-    """Apply the user ContextVar for this async task."""
-    from core.session import set_current_user
+def _set_user(user_id: str, user_role: str = "") -> None:
+    """Apply the user (and role) ContextVars for this async task."""
+    from core.session import set_current_user, set_current_user_role
     set_current_user(user_id)
+    set_current_user_role(user_role)
 
 
 def _build_from_events(raw_events: list[dict]) -> tuple[list["ToolCall"], str, list["Approval"]]:
@@ -265,7 +266,7 @@ class State(rx.State):
         self.is_thinking = True
         yield
 
-        _set_user(self.user_id)
+        _set_user(self.user_id, self.user_role)
         if not self.session_id:
             import uuid
             self.session_id = uuid.uuid4().hex[:16]
@@ -300,7 +301,7 @@ class State(rx.State):
         self.is_thinking = True
         yield
 
-        _set_user(self.user_id)
+        _set_user(self.user_id, self.user_role)
         ctx = get_context(self.user_id)
 
         raw_events = await _resolve_approval(approval, ctx, approved=True)
@@ -332,7 +333,7 @@ class State(rx.State):
         self.is_thinking = True
         yield
 
-        _set_user(self.user_id)
+        _set_user(self.user_id, self.user_role)
         ctx = get_context(self.user_id)
         raw_events = await _resolve_approval(approval, ctx, approved=False)
         tool_calls, answer, _ = _build_from_events(raw_events)
@@ -358,7 +359,7 @@ class State(rx.State):
     # ── Assets event handlers ──────────────────────────────────────────────────
     @rx.event
     def load_assets(self):
-        _set_user(self.user_id)
+        _set_user(self.user_id, self.user_role)
         from db import get_provider
         result = get_provider().list_assets(self.user_id)
         self.asset_count = result.get("count", 0)
@@ -384,7 +385,7 @@ class State(rx.State):
     # ── Schedule event handlers ────────────────────────────────────────────────
     @rx.event
     def load_schedule(self):
-        _set_user(self.user_id)
+        _set_user(self.user_id, self.user_role)
         from db import get_provider
         result = get_provider().get_upcoming_maintenance(self.user_id, self.schedule_days)
         raw = result.get("tasks", [])

@@ -41,6 +41,36 @@ CREATE TABLE IF NOT EXISTS semantic_memory (
     created_at  TEXT DEFAULT NOW()
 );
 
+-- pgvector-backed similarity search. PostgREST can't express
+-- `ORDER BY embedding_vec <=> $1` as a REST filter, so the ANN query is
+-- exposed as a callable SQL function (match_semantic_memory) invoked via
+-- .rpc() from SupabaseProvider.semantic_search.
+CREATE EXTENSION IF NOT EXISTS vector;
+
+ALTER TABLE semantic_memory ADD COLUMN IF NOT EXISTS embedding_vec vector(1024);
+ALTER TABLE semantic_memory ADD COLUMN IF NOT EXISTS embedding_dim INTEGER;
+ALTER TABLE semantic_memory ADD COLUMN IF NOT EXISTS embedding_model TEXT;
+
+CREATE INDEX IF NOT EXISTS semantic_memory_embedding_hnsw_idx
+    ON semantic_memory USING hnsw (embedding_vec vector_cosine_ops);
+
+CREATE INDEX IF NOT EXISTS semantic_memory_agent_name_idx ON semantic_memory (agent_name);
+
+CREATE OR REPLACE FUNCTION match_semantic_memory(
+    query_embedding vector(1024),
+    match_agent_name text,
+    match_count int
+)
+RETURNS TABLE (id int, content text, metadata text, score float)
+LANGUAGE sql STABLE
+AS $$
+    SELECT id, content, metadata, 1 - (embedding_vec <=> query_embedding) AS score
+    FROM semantic_memory
+    WHERE agent_name = match_agent_name AND embedding_vec IS NOT NULL
+    ORDER BY embedding_vec <=> query_embedding
+    LIMIT match_count;
+$$;
+
 CREATE TABLE IF NOT EXISTS assets (
     id              SERIAL PRIMARY KEY,
     name            TEXT NOT NULL,
@@ -118,6 +148,11 @@ class SupabaseProvider:
     def _schema_ok(self) -> bool:
         try:
             self._get_client().table("users").select("id").limit(1).execute()
+            # Column-level check (not just table existence) so a pre-pgvector
+            # database triggers the migration path below instead of silently
+            # staying on the old schema forever — `ensure_schema()` only runs
+            # `_SCHEMA_SQL` when this returns False.
+            self._get_client().table("semantic_memory").select("embedding_vec").limit(1).execute()
             return True
         except Exception:
             return False
@@ -476,23 +511,41 @@ class SupabaseProvider:
     # -- Semantic memory --
 
     def semantic_store(
-        self, agent_name: str, content: str, embedding: str, metadata: str
+        self,
+        agent_name: str,
+        content: str,
+        embedding: list[float],
+        metadata: str,
+        embedding_model: str,
     ) -> int:
+        import json
         result = self._get_client().table("semantic_memory").insert({
             "agent_name": agent_name,
             "content": content,
-            "embedding": embedding,
+            "embedding": json.dumps(embedding),
+            "embedding_vec": embedding,
+            "embedding_dim": len(embedding),
+            "embedding_model": embedding_model,
             "metadata": metadata,
         }).execute()
         return result.data[0]["id"]
 
-    def semantic_retrieve(self, agent_name: str) -> list[dict]:
-        return (
+    def semantic_search(self, agent_name: str, query_embedding: list[float], top_k: int) -> list[dict]:
+        result = self._get_client().rpc("match_semantic_memory", {
+            "query_embedding": query_embedding,
+            "match_agent_name": agent_name,
+            "match_count": top_k,
+        }).execute()
+        return result.data
+
+    def semantic_count(self, agent_name: str) -> int:
+        result = (
             self._get_client().table("semantic_memory")
-            .select("id, content, embedding, metadata")
+            .select("id", count="exact")
             .eq("agent_name", agent_name)
-            .execute().data
+            .execute()
         )
+        return result.count or 0
 
     def semantic_clear(self, agent_name: str) -> None:
         self._get_client().table("semantic_memory").delete().eq("agent_name", agent_name).execute()

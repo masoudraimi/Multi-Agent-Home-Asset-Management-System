@@ -13,7 +13,7 @@ memory:
   long_term: false
   semantic: true
 guardrails:
-  pii_detection: false
+  pii_detection: true
   prompt_injection: true
   max_output_chars: 16000
 # LangGraph loop-engineering knobs (Phase 0)

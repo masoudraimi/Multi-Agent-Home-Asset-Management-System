@@ -1,7 +1,7 @@
 ﻿"""Core CRUD functions for the home asset database.
 
-These are plain Python functions - no decorator magic. The MCP server in
-tools/mcp_server.py wraps them with the claude-agent-sdk tool decorator.
+These are plain Python functions - no decorator magic. tools/stdio_server.py
+(MCP path) and tools/langchain_tools.py (LangGraph path) both wrap them.
 
 All DB operations delegate to the active provider via db.get_provider().
 Session concern (current user) is resolved here, not inside the provider.
@@ -9,9 +9,18 @@ Session concern (current user) is resolved here, not inside the provider.
 
 from typing import Optional
 
-from core.observability import audit_log
+from structlog.contextvars import get_contextvars
+
+from core.audit import audit
 from core.session import get_current_user_id
 from db import get_provider
+
+
+def _current_request_id() -> str:
+    """Best-effort request_id for audit events — bound by enter_node on the
+    LangGraph path; may be unset on the CLI path, which is fine, audit()
+    just records an empty string rather than requiring one."""
+    return get_contextvars().get("request_id", "")
 
 
 # ---------------------------------------------------------------------------
@@ -70,10 +79,18 @@ def add_asset(
             odometer_km=odometer_km, next_service_km=next_service_km,
             user_id=get_current_user_id(),
         )
-        audit_log("asset_added", {"name": name, "category": category, "result": result})
+        audit(
+            "asset_created", request_id=_current_request_id(), actor="agent",
+            user_id=get_current_user_id(),
+            payload={"name": name, "category": category, "asset_id": result.get("asset_id")},
+        )
         return result
     except Exception as exc:
-        audit_log("asset_add_failed", {"name": name, "category": category, "error": str(exc)})
+        audit(
+            "asset_create_failed", request_id=_current_request_id(), actor="agent",
+            user_id=get_current_user_id(),
+            payload={"name": name, "category": category, "error": str(exc)[:500]},
+        )
         raise
 
 
@@ -206,10 +223,16 @@ def delete_asset(asset_id: int) -> dict:
     """
     try:
         result = get_provider().delete_asset(get_current_user_id(), asset_id)
-        audit_log("asset_deleted", {"asset_id": asset_id, "result": result})
+        audit(
+            "asset_deleted", request_id=_current_request_id(), actor="agent",
+            user_id=get_current_user_id(), payload={"asset_id": asset_id, "result": result},
+        )
         return result
     except Exception as exc:
-        audit_log("asset_delete_failed", {"asset_id": asset_id, "error": str(exc)})
+        audit(
+            "asset_delete_failed", request_id=_current_request_id(), actor="agent",
+            user_id=get_current_user_id(), payload={"asset_id": asset_id, "error": str(exc)[:500]},
+        )
         raise
 
 

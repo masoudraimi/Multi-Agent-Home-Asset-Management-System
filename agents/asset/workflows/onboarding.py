@@ -6,9 +6,10 @@ import json
 
 from core.models import simple_complete
 
+from core.audit import audit
 from core.event_bus import EventBus
 from core.events import HumanApprovalRequested
-from core.observability import audit_log
+from core.session import get_current_user_id_or_none
 from schema import get_questions
 
 _SYNONYMS = {
@@ -91,11 +92,13 @@ Only flag genuinely important missing fields, not optional ones."""
             action_description=f"Save asset: {draft.get('name', 'unnamed')} ({asset_type})",
             payload=draft,
         ))
-        audit_log("approval_requested", {
-            "request_id": request_id,
-            "agent_name": "asset",
-            "asset_name": draft.get("name", "unnamed"),
-            "category": asset_type,
-        })
+        audit(
+            "approval_requested", request_id=request_id, actor="agent",
+            user_id=get_current_user_id_or_none(), agent="asset",
+            payload={
+                "action": "add_asset", "asset_name": draft.get("name", "unnamed"),
+                "category": asset_type,
+            },
+        )
 
     return result

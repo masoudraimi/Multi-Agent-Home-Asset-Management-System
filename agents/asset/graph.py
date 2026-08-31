@@ -1,11 +1,9 @@
 """Asset specialist LangGraph subgraph.
 
 Uses the shared builder in `agents/_specialist.py` for the standard
-enter → guardrail_in → llm ↔ tools → guardrail_out → exit shape, plus
-the asset-specific `handle_approval` node that intercepts destructive
-`delete_asset` calls via LangGraph's `interrupt()`.
-
-Feature-flagged via `USE_LANGGRAPH=asset` (or `all`).
+enter → guardrail_in → retrieve → llm ↔ tools → guardrail_tool_output →
+guardrail_out → exit shape, plus the asset-specific `handle_approval` node
+that intercepts destructive `delete_asset` calls via LangGraph's `interrupt()`.
 """
 
 from __future__ import annotations

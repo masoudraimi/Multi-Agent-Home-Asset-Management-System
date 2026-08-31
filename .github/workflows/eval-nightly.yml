@@ -1,0 +1,35 @@
+name: LLM Eval (nightly/manual)
+
+# Real-API integration eval (eval/run_eval.py) — deliberately kept off the
+# per-PR ci.yml workflow so real LLM/embedding cost never lands on every
+# push. Needs ANTHROPIC_API_KEY, VOYAGE_API_KEY, and DATABASE_URL (seeded
+# per eval/scenarios.json's expectations) as repo secrets.
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 15 * * *"  # ~01:00 AEST
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv python install 3.13
+      - run: uv sync --frozen
+      - name: Run benchmark suite
+        run: uv run python eval/run_eval.py
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+          DATABASE_URL: ${{ secrets.EVAL_DATABASE_URL }}
+          DB_PROVIDER: neon
+          LLM_PROVIDER: claude_sdk
+      - name: Compare against last committed baseline
+        run: uv run python eval/compare.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: |
+            eval/results.json
+            eval/history/

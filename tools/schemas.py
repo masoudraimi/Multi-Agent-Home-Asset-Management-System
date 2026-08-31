@@ -1,8 +1,8 @@
 """Pydantic input schemas for every tool exposed to LangChain / LangGraph.
 
-Single source of truth — imported by `tools/langchain_tools.py` and (until
-Phase 6 lands) by the legacy `tools/mcp_server.py`. When mcp_server.py is
-deleted, this module becomes the only holder of these schemas.
+Single source of truth — imported by both `tools/langchain_tools.py`
+(LangGraph path) and `tools/stdio_server.py` (Claude Code CLI / MCP path),
+so the tool contract is single-sourced across both runtimes.
 
 Kept flat + typed rather than dynamically generated so IDE navigation
 and Pydantic strict-mode both work.

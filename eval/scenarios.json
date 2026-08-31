@@ -103,5 +103,41 @@
     "query": "What maintenance tasks across all my assets are overdue or due within the next 2 weeks? For each, tell me the last time it was done.",
     "expected_tools": ["get_upcoming_maintenance", "get_asset_history"],
     "expected_answer_contains": []
+  },
+  {
+    "id": "s16",
+    "tier": "simple",
+    "query": "How often should I deep water my lemon tree?",
+    "expected_tools": [],
+    "expected_answer_contains": ["14", "day"],
+    "requires_retrieval": true,
+    "note": "Exercises maintenance's auto-retrieve node against indexed plant-care data (schema/plants_trees.py deep_water interval_days=14) — no tool call needed since retrieval is automatic."
+  },
+  {
+    "id": "s17",
+    "tier": "simple",
+    "query": "Why is checking my dishwasher on the home maintenance checklist?",
+    "expected_tools": [],
+    "expected_answer_contains": ["descal"],
+    "requires_retrieval": true,
+    "note": "Exercises asset's auto-retrieve node against indexed checklist data (schema get_checklist() dishwasher reason: 'Descaling prevents costly repairs')."
+  },
+  {
+    "id": "s18",
+    "tier": "simple",
+    "query": "How often should I clean my dishwasher's filter?",
+    "expected_tools": [],
+    "expected_answer_contains": ["filter", "week"],
+    "requires_retrieval": true,
+    "note": "Exercises the chunked long-form ingestion path (knowledge/rag/sample_docs/dishwasher_manual_excerpt.md via knowledge/rag/ingest.py), not a single-line structured record."
+  },
+  {
+    "id": "s19",
+    "tier": "moderate",
+    "query": "What's the recommended maintenance schedule for a home elevator?",
+    "expected_tools": [],
+    "expected_answer_contains": [],
+    "requires_retrieval": true,
+    "note": "Negative case: nothing about elevators is indexed. Mechanical scoring can't catch a hallucinated citation here (empty expected_answer_contains always scores 1.0) — this is what the judge's groundedness axis is for: the answer should say it doesn't have that information rather than inventing a source tag."
   }
 ]

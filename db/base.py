@@ -75,11 +75,20 @@ class DBProvider(Protocol):
     def memory_delete(self, user_id: str, agent_name: str, key: str) -> None: ...
     def memory_get_all(self, user_id: str, agent_name: str) -> list[dict]: ...
 
-    # -- Semantic memory --
+    # -- Semantic memory (pgvector-backed; similarity search happens in SQL) --
 
     def semantic_store(
-        self, agent_name: str, content: str, embedding: str, metadata: str
+        self,
+        agent_name: str,
+        content: str,
+        embedding: list[float],
+        metadata: str,
+        embedding_model: str,
     ) -> int: ...
 
-    def semantic_retrieve(self, agent_name: str) -> list[dict]: ...
+    def semantic_search(
+        self, agent_name: str, query_embedding: list[float], top_k: int
+    ) -> list[dict]: ...
+
+    def semantic_count(self, agent_name: str) -> int: ...
     def semantic_clear(self, agent_name: str) -> None: ...

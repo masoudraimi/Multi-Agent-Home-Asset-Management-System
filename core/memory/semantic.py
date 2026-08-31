@@ -1,15 +1,16 @@
 """Semantic memory: text storage with embedding-based retrieval.
 
-Embeddings are stored as JSON arrays in the `semantic_memory` table. Cosine
-similarity is computed in-process with numpy.
+Embeddings are stored in a pgvector `vector(1024)` column; similarity search
+(`ORDER BY embedding_vec <=> query LIMIT k`) runs in SQL via
+`db.*.semantic_search`, not as a Python-side loop over every row.
 
 Embedding backend selection:
   * If `VOYAGE_API_KEY` is set → Voyage AI `voyage-3.5-lite` (1024-dim).
-  * Otherwise → deterministic hash stub (512-dim).
-
-Dimension mismatch between backends is handled at read time — rows with an
-embedding vector of the wrong length are skipped instead of raising, so the
-system degrades gracefully when the backend swaps.
+  * Otherwise → deterministic hash stub (512-dim). This is a degraded mode:
+    the stub carries no semantic meaning, and a stub-dimensioned vector can't
+    be compared against the vector(1024) column at all, so `retrieve()`
+    short-circuits to `[]` rather than issuing a meaningless SQL search. The
+    fallback is logged loudly (see `_warn_stub_fallback_once`), not silently.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 from typing import Any
 
 from core.logging import get_logger
@@ -27,6 +29,9 @@ log = get_logger(__name__)
 _STUB_DIM = 512
 _VOYAGE_DIM = 1024
 _VOYAGE_MODEL = "voyage-3.5-lite"
+_STUB_MODEL = "hash_stub_v1"
+
+_warned_stub_fallback = False
 
 
 def _embed_stub(text: str, *, dim: int = _STUB_DIM) -> list[float]:
@@ -60,15 +65,41 @@ def _embed_voyage(text: str, *, input_type: str = "document") -> list[float] | N
         return None
 
 
+def _warn_stub_fallback_once() -> None:
+    global _warned_stub_fallback
+    if _warned_stub_fallback:
+        return
+    _warned_stub_fallback = True
+    banner = (
+        "\n" + "!" * 78 + "\n"
+        "! SEMANTIC MEMORY IS RUNNING ON THE HASH-STUB EMBEDDING FALLBACK.\n"
+        "! VOYAGE_API_KEY is missing or invalid — retrieval quality is\n"
+        "! degraded to random noise. Set VOYAGE_API_KEY to restore real RAG.\n"
+        + "!" * 78 + "\n"
+    )
+    print(banner, file=sys.stderr)
+    log.warning(
+        "semantic_embedding_stub_fallback_active",
+        reason="missing_or_invalid_VOYAGE_API_KEY",
+        impact="retrieval_quality_degraded_to_random_noise",
+    )
+
+
 def _embed(text: str, *, input_type: str = "document") -> list[float]:
     """Pick the best available embedding backend for `text`."""
-    return _embed_voyage(text, input_type=input_type) or _embed_stub(text)
+    vec = _embed_voyage(text, input_type=input_type)
+    if vec is not None:
+        return vec
+    _warn_stub_fallback_once()
+    return _embed_stub(text)
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Pure-Python cosine similarity — used only by the in-memory test double
+    in tests/test_semantic_memory.py, not by the production SQL-search path.
+    """
     import numpy as np
     if len(a) != len(b):
-        # Dimension mismatch — skip this row rather than crash.
         return -1.0
     va, vb = np.array(a), np.array(b)
     return float(np.dot(va, vb) / (np.linalg.norm(va) * np.linalg.norm(vb) + 1e-9))
@@ -80,32 +111,33 @@ class SemanticMemory:
 
     def store(self, content: str, metadata: dict[str, Any] | None = None) -> int:
         embedding = _embed(content, input_type="document")
+        model = _VOYAGE_MODEL if len(embedding) == _VOYAGE_DIM else _STUB_MODEL
         return get_provider().semantic_store(
             agent_name=self.agent_name,
             content=content,
-            embedding=json.dumps(embedding),
+            embedding=embedding,
             metadata=json.dumps(metadata or {}),
+            embedding_model=model,
         )
 
     def retrieve(self, query: str, top_k: int = 3) -> list[dict[str, Any]]:
         q_emb = _embed(query, input_type="query")
-        rows = get_provider().semantic_retrieve(self.agent_name)
-        if not rows:
+        if len(q_emb) != _VOYAGE_DIM:
+            # Stub-dimensioned query embedding can't be compared against the
+            # vector(1024) column — surface an empty result rather than a
+            # SQL error. The fallback warning already fired in _embed().
             return []
-        scored = []
+        rows = get_provider().semantic_search(self.agent_name, q_emb, top_k)
+        results = []
         for row in rows:
-            emb = json.loads(row["embedding"])
-            score = _cosine_similarity(q_emb, emb)
-            if score < 0:       # dimension mismatch — skip stale rows
-                continue
-            scored.append({
+            meta = row["metadata"]
+            results.append({
                 "id": row["id"],
                 "content": row["content"],
-                "score": round(score, 4),
-                "metadata": json.loads(row["metadata"]),
+                "score": round(float(row["score"]), 4),
+                "metadata": json.loads(meta) if isinstance(meta, str) else (meta or {}),
             })
-        scored.sort(key=lambda x: x["score"], reverse=True)
-        return scored[:top_k]
+        return results
 
     def clear(self) -> None:
         get_provider().semantic_clear(self.agent_name)

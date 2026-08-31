@@ -30,7 +30,7 @@ from langgraph.types import Command
 from agents.state import AgentState, make_initial_state
 from core.logging import bind_correlation, get_logger
 from core.memory.short_term import ConversationContext
-from core.session import get_current_user_id_or_none
+from core.session import get_current_user_id_or_none, get_current_user_role_or_none
 
 log = get_logger(__name__)
 
@@ -52,12 +52,14 @@ async def run_graph_turn(
     """
     request_id = request_id or _new_request_id()
     user_id = get_current_user_id_or_none() or ""
+    user_role = get_current_user_role_or_none() or ""
     bind_correlation(request_id=request_id, user_id=user_id, agent=agent_name)
 
     prior_messages = _context_to_messages(context)
     initial: AgentState = make_initial_state(
         user_message=user_message,
         user_id=user_id,
+        user_role=user_role,
         request_id=request_id,
         prior_messages=prior_messages,
         asset_index=dict(context._asset_ids),
@@ -293,9 +295,11 @@ def _ms_since(t0: float) -> int:
 
 
 def _context_to_messages(context: ConversationContext) -> list[BaseMessage]:
-    """Convert the last 5 (user, assistant) turns to alternating messages."""
+    """Convert recent (user, assistant) turns to alternating messages, using
+    the same token-budget-aware selection as ConversationContext.format_prompt
+    rather than a fixed turn count."""
     out: list[BaseMessage] = []
-    for user, assistant in context._turns[-5:]:
+    for user, assistant in context.recent_turns_within_budget():
         if user:
             out.append(HumanMessage(content=user))
         if assistant:

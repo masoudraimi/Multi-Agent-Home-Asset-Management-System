@@ -18,7 +18,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 RouteName = Literal["asset", "maintenance", "insights"]
-TerminationReason = Literal["ok", "budget", "max_iter", "guardrail", "error"]
+TerminationReason = Literal["ok", "budget", "max_iter", "guardrail", "error", "rate_limited"]
 
 
 class AgentState(TypedDict, total=False):
@@ -44,6 +44,7 @@ class AgentState(TypedDict, total=False):
 
     # ── Session ────────────────────────────────────────────────────────
     user_id: str
+    user_role: str                              # "admin" | "user"; never an LLM tool arg
     request_id: str                             # UUIDv7 assigned in rxapp/state.py
 
     # ── Human-in-the-loop (Phase 2 activates these) ───────────────────
@@ -56,6 +57,7 @@ def make_initial_state(
     user_message: str,
     user_id: str,
     request_id: str,
+    user_role: str = "",
     prior_messages: list[BaseMessage] | None = None,
     asset_index: dict[str, int] | None = None,
 ) -> AgentState:
@@ -75,6 +77,7 @@ def make_initial_state(
         usd_cost=0.0,
         termination_reason=None,
         user_id=user_id,
+        user_role=user_role,
         request_id=request_id,
         pending_approval=None,
         approval_result=None,

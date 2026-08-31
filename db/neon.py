@@ -62,6 +62,21 @@ CREATE TABLE IF NOT EXISTS semantic_memory (
     created_at  TEXT DEFAULT NOW()
 );
 
+-- pgvector-backed similarity search: SQL does the ANN search (ORDER BY <=>)
+-- instead of a Python-side cosine loop over every row. embedding_vec is
+-- nullable during migration so pre-pgvector rows aren't dropped; they stay
+-- queryable only via the legacy `embedding` TEXT column until re-embedded.
+CREATE EXTENSION IF NOT EXISTS vector;
+
+ALTER TABLE semantic_memory ADD COLUMN IF NOT EXISTS embedding_vec vector(1024);
+ALTER TABLE semantic_memory ADD COLUMN IF NOT EXISTS embedding_dim INTEGER;
+ALTER TABLE semantic_memory ADD COLUMN IF NOT EXISTS embedding_model TEXT;
+
+CREATE INDEX IF NOT EXISTS semantic_memory_embedding_hnsw_idx
+    ON semantic_memory USING hnsw (embedding_vec vector_cosine_ops);
+
+CREATE INDEX IF NOT EXISTS semantic_memory_agent_name_idx ON semantic_memory (agent_name);
+
 CREATE TABLE IF NOT EXISTS assets (
     id              SERIAL PRIMARY KEY,
     name            TEXT NOT NULL,
@@ -531,26 +546,54 @@ class NeonProvider:
     # -- Semantic memory --
 
     def semantic_store(
-        self, agent_name: str, content: str, embedding: str, metadata: str
+        self,
+        agent_name: str,
+        content: str,
+        embedding: list[float],
+        metadata: str,
+        embedding_model: str,
     ) -> int:
-        with self._conn().cursor() as cur:
+        import json
+        from pgvector.psycopg import register_vector
+
+        conn = self._conn()
+        register_vector(conn)
+        with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO semantic_memory (agent_name, content, embedding, metadata)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO semantic_memory
+                    (agent_name, content, embedding, embedding_vec, embedding_dim, embedding_model, metadata)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                [agent_name, content, embedding, metadata],
+                [agent_name, content, json.dumps(embedding), embedding,
+                 len(embedding), embedding_model, metadata],
             )
             return cur.fetchone()["id"]
 
-    def semantic_retrieve(self, agent_name: str) -> list[dict]:
-        with self._conn().cursor() as cur:
+    def semantic_search(self, agent_name: str, query_embedding: list[float], top_k: int) -> list[dict]:
+        from pgvector.psycopg import register_vector
+
+        conn = self._conn()
+        register_vector(conn)
+        with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, content, embedding, metadata FROM semantic_memory WHERE agent_name=%s",
-                [agent_name],
+                """
+                SELECT id, content, metadata,
+                       1 - (embedding_vec <=> %s) AS score
+                FROM semantic_memory
+                WHERE agent_name = %s AND embedding_vec IS NOT NULL
+                ORDER BY embedding_vec <=> %s
+                LIMIT %s
+                """,
+                [query_embedding, agent_name, query_embedding, top_k],
             )
             return [dict(r) for r in cur.fetchall()]
+
+    def semantic_count(self, agent_name: str) -> int:
+        with self._conn().cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS n FROM semantic_memory WHERE agent_name=%s", [agent_name])
+            return int(cur.fetchone()["n"])
 
     def semantic_clear(self, agent_name: str) -> None:
         with self._conn().cursor() as cur:

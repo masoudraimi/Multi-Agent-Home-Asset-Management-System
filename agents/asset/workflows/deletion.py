@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from structlog.contextvars import get_contextvars
+
+from core.audit import audit
 from core.event_bus import EventBus
 from core.events import HumanApprovalRequested
-from core.observability import audit_log
 from core.session import get_current_user_id
 from db import get_provider
 
@@ -42,12 +44,15 @@ def review_delete_asset(asset_id: int) -> dict:
             "maintenance_records_to_delete": maint_count,
         },
     ))
-    audit_log("delete_approval_requested", {
-        "request_id": request_id,
-        "asset_id": asset_id,
-        "asset_name": asset.get("name", ""),
-        "maintenance_count": maint_count,
-    })
+    audit(
+        "approval_requested",
+        request_id=get_contextvars().get("request_id") or request_id,
+        actor="agent", user_id=user_id, agent="asset",
+        payload={
+            "action": "delete_asset", "asset_id": asset_id,
+            "asset_name": asset.get("name", ""), "maintenance_count": maint_count,
+        },
+    )
 
     return {
         "status": "approval_requested",

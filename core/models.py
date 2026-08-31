@@ -33,6 +33,16 @@ _MODEL_IDS: dict[Provider, dict[str, str]] = {
 }
 
 
+# Context window sizes (tokens) per logical tier — both current Claude tiers
+# share 200k, so this is mostly future-proofing/documentation, but it makes
+# short-term memory's history budget explainable and correct if a tier's
+# context size ever changes.
+CONTEXT_WINDOW_TOKENS: dict[str, int] = {
+    "haiku": 200_000,
+    "sonnet": 200_000,
+}
+
+
 def resolve_model(logical_name: str) -> str:
     """Map 'haiku' or 'sonnet' to the provider-specific model ID.
 

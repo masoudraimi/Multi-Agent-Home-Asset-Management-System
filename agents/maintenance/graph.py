@@ -2,10 +2,9 @@
 
 Standard specialist shape (see agents/_specialist.py) with no HITL branch —
 maintenance scheduling, plant care, and reminders don't require approval
-gates. Semantic-memory retrieval is declared in `agent.yaml:retrieve_semantic`
-and will be wired in Phase 5.
-
-Feature-flagged via `USE_LANGGRAPH=maintenance` (or `all`).
+gates. Semantic-memory retrieval is enabled via `agent.yaml:retrieve_semantic`
+and runs automatically through the shared `retrieve` node before every `llm`
+call.
 """
 
 from __future__ import annotations

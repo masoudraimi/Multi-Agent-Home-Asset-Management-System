@@ -23,9 +23,10 @@ data/checkpoints.sqlite
 data/langfuse-postgres/
 data/langfuse-clickhouse/
 data/langfuse-minio/
+data/audit.log
+data/audit-chain-state.json
+data/audit-*.log.gz
 
-# Eval output
-eval/results.json
 
 # macOS
 .DS_Store
